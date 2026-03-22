@@ -7,6 +7,7 @@ export default function Home() {
   const [budget, setBudget] = useState(5000000);
   const [position, setPosition] = useState("ALL");
 
+  // 💰 Format money
   function formatMoney(num: number) {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
@@ -15,30 +16,25 @@ export default function Home() {
     }).format(num);
   }
 
-  // 🧠 ELITE SCORING SYSTEM
+  // 🧠 ELITE SCORING (FIXED DISTRIBUTION)
   function calculateScore(p: any) {
-    let score = 50;
+    const ageScore = 100 - Math.abs(24 - p.age) * 4;
+    const valueScore = 100 - Math.log10(p.value + 1) * 20;
+    const wageScore = 100 - Math.log10(p.wage + 1) * 25;
 
-    const valueScore = (10000000 - p.value) / 1000000;
-    const wageScore = (50000 - p.wage) / 5000;
-    const ageScore = (25 - p.age) * 2;
+    let score =
+      ageScore * 0.4 +
+      valueScore * 0.3 +
+      wageScore * 0.3;
 
-    // Efficiency metrics
-    const valueEfficiency = p.value > 0 ? 10000000 / p.value : 0;
-    const wageEfficiency = p.wage > 0 ? 50000 / p.wage : 0;
-
-    score += valueScore + wageScore + ageScore;
-    score += valueEfficiency * 2;
-    score += wageEfficiency * 2;
-
-    if (p.pos === "ST") score += 3;
-    if (p.pos === "CB") score += 2;
+    if (p.pos === "ST") score += 2;
+    if (p.pos === "CB") score += 1;
     if (p.pos === "GK") score -= 2;
 
-    return Math.max(1, Math.min(100, Math.round(score)));
+    return Math.max(1, Math.min(99, Math.round(score)));
   }
 
-  // 🔥 ELITE INSIGHTS
+  // 🔥 INSIGHTS
   function getInsight(p: any) {
     if (p.score > 90 && p.value < 3000000) return "💎 Hidden Gem";
     if (p.score > 85 && p.value < 10000000) return "💰 Best Value";
@@ -49,6 +45,7 @@ export default function Home() {
     return "⚖️ Squad Option";
   }
 
+  // 📂 CLEAN CSV PARSER
   function handleFile(e: any) {
     const file = e.target.files[0];
     if (!file) return;
@@ -94,6 +91,7 @@ export default function Home() {
     reader.readAsText(file);
   }
 
+  // 🐦 SHARE
   function shareToTwitter() {
     if (players.length === 0) return;
 
@@ -113,7 +111,7 @@ https://valuescout-6g6v.vercel.app/`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
   }
 
-  // 🎯 FILTER LOGIC
+  // 🎯 FILTERS
   const filtered = players.filter((p) => {
     return (position === "ALL" || p.pos === position) && p.value <= budget;
   });
@@ -158,18 +156,42 @@ https://valuescout-6g6v.vercel.app/`;
         🐦 Share Results
       </button>
 
-      {/* 🔥 RESULTS */}
+      {/* 🔥 TOP CARDS */}
       {sorted.length > 0 && (
         <>
           <h2>🔥 Top Targets</h2>
-          {sorted.slice(0, 5).map((p, i) => (
-            <div key={i}>
-              {p.name} — {p.score} — {p.insight}
-            </div>
-          ))}
 
-          <h2>📊 All Players</h2>
-          <table style={{ width: "100%" }}>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            {sorted.slice(0, 5).map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: 15,
+                  borderRadius: 10,
+                  background: "#1e293b",
+                  minWidth: 200,
+                }}
+              >
+                <h3>{p.name}</h3>
+                <p>{p.pos}</p>
+                <p style={{ fontSize: 22, fontWeight: "bold" }}>{p.score}</p>
+                <p>{p.insight}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* 💎 BEST VALUE */}
+          <h3 style={{ marginTop: 30 }}>💎 Best Value Pick</h3>
+          {sorted[0] && (
+            <div>
+              {sorted[0].name} — {formatMoney(sorted[0].value)} — {sorted[0].score}
+            </div>
+          )}
+
+          {/* 📊 TABLE */}
+          <h2 style={{ marginTop: 40 }}>📊 All Players</h2>
+
+          <table style={{ width: "100%", marginTop: 20 }}>
             <thead>
               <tr>
                 <th>Name</th>
@@ -189,7 +211,12 @@ https://valuescout-6g6v.vercel.app/`;
                   <td>{p.age}</td>
                   <td>{formatMoney(p.wage)}</td>
                   <td>{formatMoney(p.value)}</td>
-                  <td style={{ color: p.score > 85 ? "lime" : p.score > 70 ? "orange" : "red" }}>
+                  <td style={{
+                    color:
+                      p.score > 85 ? "#22c55e" :
+                      p.score > 70 ? "#eab308" :
+                      "#ef4444"
+                  }}>
                     {p.score}
                   </td>
                   <td>{p.insight}</td>

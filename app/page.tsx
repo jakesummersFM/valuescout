@@ -15,28 +15,21 @@ export default function Home() {
     }).format(num);
   }
 
-  // 🧠 BALANCED SCORING (FIXED AGAIN)
   function calculateScore(p: any) {
-    // Age (peak 24)
-    const ageScore = 100 - Math.abs(24 - p.age) * 2;
-
-    // Value (scaled softer)
-    const valueScore = 100 - Math.log10(p.value + 1) * 10;
-
-    // Wage (scaled softer)
-    const wageScore = 100 - Math.log10(p.wage + 1) * 12;
+    const ageScore = 100 - Math.abs(24 - p.age) * 1.5;
+    const valueScore = 100 - Math.log10(p.value + 1) * 8;
+    const wageScore = 100 - Math.log10(p.wage + 1) * 10;
 
     let score =
       ageScore * 0.4 +
       valueScore * 0.3 +
       wageScore * 0.3;
 
-    // Position tweaks
     if (p.pos === "ST") score += 2;
     if (p.pos === "CB") score += 1;
     if (p.pos === "GK") score -= 2;
 
-    return Math.max(40, Math.min(99, Math.round(score)));
+    return Math.max(50, Math.min(99, Math.round(score)));
   }
 
   function getInsight(p: any) {
@@ -57,60 +50,66 @@ export default function Home() {
 
     reader.onload = (event: any) => {
       const text = event.target.result;
-      const rows = text.split("\n").slice(1);
 
-      const parsed = rows
-        .map((row: string) => {
-          const cols = row.split(",");
-          if (cols.length < 5) return null;
+      const rows = text.split(/\r?\n/).filter((r: string) => r.trim() !== "");
+      if (rows.length < 2) return;
 
-          const age = Number(cols[2]);
-          const wage = Number(cols[3]);
-          const value = Number(cols[4]);
+      const delimiter = rows[0].includes(";") ? ";" : ",";
 
-          if (isNaN(age) || isNaN(wage) || isNaN(value)) return null;
+      const headers = rows[0]
+        .split(delimiter)
+        .map((h: string) => h.trim().toLowerCase());
 
-          const p = {
-            name: cols[0],
-            pos: cols[1],
-            age,
-            wage,
-            value,
-          };
+      // 🔥 STRONG HEADER MATCHING
+      const getIndex = (keywords: string[]) =>
+        headers.findIndex((h: string) =>
+          keywords.some((k) => h.includes(k))
+        );
 
-          const score = calculateScore(p);
+      const nameIndex = getIndex(["name"]);
+      const posIndex = getIndex(["pos", "position"]);
+      const ageIndex = getIndex(["age"]);
+      const wageIndex = getIndex(["wage", "salary", "weekly"]);
+      const valueIndex = getIndex(["value", "price", "transfer"]);
 
-          return {
-            ...p,
-            score,
-            insight: getInsight({ ...p, score }),
-          };
-        })
-        .filter((p: any) => p !== null);
+      // 🔥 SMART NUMBER CLEANER
+      const cleanNumber = (val: string) => {
+        if (!val) return 0;
 
-      setPlayers(parsed);
+        let v = val.toLowerCase().replace(/,/g, "").trim();
+
+        if (v.includes("m")) return Number(v.replace("m", "")) * 1000000;
+        if (v.includes("k")) return Number(v.replace("k", "")) * 1000;
+
+        return Number(v.replace(/[^0-9.]/g, ""));
+      };
+
+      const parsed = rows.slice(1).map((row: string) => {
+        const cols = row.split(delimiter);
+
+        const p = {
+          name: cols[nameIndex]?.trim() || "Unknown",
+          pos: cols[posIndex]?.trim() || "N/A",
+          age: cleanNumber(cols[ageIndex]),
+          wage: cleanNumber(cols[wageIndex]),
+          value: cleanNumber(cols[valueIndex]),
+        };
+
+        if (!p.name || isNaN(p.age)) return null;
+
+        const score = calculateScore(p);
+
+        return {
+          ...p,
+          score,
+          insight: getInsight({ ...p, score }),
+        };
+      });
+
+      setPlayers(parsed.filter((p: any) => p !== null));
     };
 
     reader.readAsText(file);
-  }
-
-  function shareToTwitter() {
-    if (players.length === 0) return;
-
-    const top = [...players]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-
-    const text = `ValueScout found these gems 💎
-
-🔥 ${top[0]?.name} (${top[0]?.score})
-🔥 ${top[1]?.name} (${top[1]?.score})
-🔥 ${top[2]?.name} (${top[2]?.score})
-
-Try it 👇
-https://valuescout-6g6v.vercel.app/`;
-
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
   }
 
   const filtered = players.filter((p) => {
@@ -124,17 +123,17 @@ https://valuescout-6g6v.vercel.app/`;
       style={{
         padding: 30,
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #0f172a, #1e293b)",
+        background:
+          "linear-gradient(135deg, #0f172a, #1e293b, #312e81)",
         color: "white",
-        fontFamily: "system-ui",
       }}
     >
-      <h1 style={{ fontSize: 36, fontWeight: "bold" }}>ValueScout 💎</h1>
-      <p style={{ opacity: 0.7 }}>Elite Moneyball Analysis</p>
+      <h1 style={{ fontSize: 32, marginBottom: 10 }}>
+        ValueScout 💎
+      </h1>
 
-      <input type="file" onChange={handleFile} style={{ marginTop: 20 }} />
+      <input type="file" onChange={handleFile} />
 
-      {/* FILTERS */}
       <div style={{ marginTop: 20 }}>
         <label>Budget: {formatMoney(budget)}</label>
         <input
@@ -144,22 +143,13 @@ https://valuescout-6g6v.vercel.app/`;
           step="1000000"
           value={budget}
           onChange={(e) => setBudget(Number(e.target.value))}
-          style={{ width: "100%" }}
         />
 
         <select
           value={position}
           onChange={(e) => setPosition(e.target.value)}
-          style={{
-            marginTop: 10,
-            padding: 8,
-            borderRadius: 6,
-            background: "#1e293b",
-            color: "white",
-            border: "none",
-          }}
         >
-          <option value="ALL">All Positions</option>
+          <option value="ALL">All</option>
           <option value="ST">ST</option>
           <option value="CM">CM</option>
           <option value="CB">CB</option>
@@ -168,133 +158,38 @@ https://valuescout-6g6v.vercel.app/`;
         </select>
       </div>
 
-      <button
-        onClick={shareToTwitter}
-        style={{
-          marginTop: 20,
-          padding: "10px 20px",
-          borderRadius: 8,
-          border: "none",
-          background: "#38bdf8",
-          color: "#0f172a",
-          fontWeight: "bold",
-          cursor: "pointer",
-        }}
-      >
-        🐦 Share Results
-      </button>
-
-      {/* RESULTS */}
       {sorted.length > 0 && (
         <>
-          <h2 style={{ marginTop: 40 }}>🔥 Top Targets</h2>
+          <h2 style={{ marginTop: 30 }}>Top Players</h2>
 
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            {sorted.slice(0, 5).map((p, i) => {
-              const initials = p.name
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("");
+          {sorted.slice(0, 10).map((p, i) => (
+            <div
+              key={i}
+              style={{
+                padding: 15,
+                marginTop: 10,
+                borderRadius: 10,
+                background: "#1e293b",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <strong>{p.name}</strong> ({p.pos})
+                <br />
+                Age: {p.age}
+                <br />
+                Wage: {formatMoney(p.wage)}
+                <br />
+                Value: {formatMoney(p.value)}
+              </div>
 
-              const scoreColor =
-                p.score > 85 ? "#22c55e" :
-                p.score > 70 ? "#eab308" :
-                "#ef4444";
-
-              return (
-                <div
-                  key={i}
-                  style={{
-                    padding: 20,
-                    borderRadius: 16,
-                    background: "rgba(255,255,255,0.05)",
-                    backdropFilter: "blur(10px)",
-                    minWidth: 220,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 50,
-                      height: 50,
-                      borderRadius: "50%",
-                      background: "#38bdf8",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: "bold",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {initials}
-                  </div>
-
-                  <h3>{p.name}</h3>
-                  <p style={{ opacity: 0.7 }}>{p.pos}</p>
-
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: "5px 10px",
-                      borderRadius: 20,
-                      background: scoreColor,
-                      color: "black",
-                      display: "inline-block",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {p.score}
-                  </div>
-
-                  <p style={{ marginTop: 10 }}>{p.insight}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          <h3 style={{ marginTop: 30 }}>💎 Best Value Pick</h3>
-          {sorted[0] && (
-            <div style={{ opacity: 0.8 }}>
-              {sorted[0].name} — {formatMoney(sorted[0].value)} — {sorted[0].score}
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 24 }}>{p.score}</div>
+                <div>{p.insight}</div>
+              </div>
             </div>
-          )}
-
-          <h2 style={{ marginTop: 40 }}>📊 All Players</h2>
-
-          <table style={{ width: "100%", marginTop: 20 }}>
-            <thead style={{ opacity: 0.7 }}>
-              <tr>
-                <th>Name</th>
-                <th>Pos</th>
-                <th>Age</th>
-                <th>Wage</th>
-                <th>Value</th>
-                <th>Score</th>
-                <th>Insight</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((p, i) => {
-                const scoreColor =
-                  p.score > 85 ? "#22c55e" :
-                  p.score > 70 ? "#eab308" :
-                  "#ef4444";
-
-                return (
-                  <tr key={i}>
-                    <td>{p.name}</td>
-                    <td>{p.pos}</td>
-                    <td>{p.age}</td>
-                    <td>{formatMoney(p.wage)}</td>
-                    <td>{formatMoney(p.value)}</td>
-                    <td style={{ color: scoreColor, fontWeight: "bold" }}>
-                      {p.score}
-                    </td>
-                    <td>{p.insight}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          ))}
         </>
       )}
     </main>

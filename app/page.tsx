@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export default function Home() {
   const [players, setPlayers] = useState<any[]>([]);
+  const [sortBy, setSortBy] = useState("score");
 
   // 💰 FORMAT MONEY
   function formatMoney(num: number) {
@@ -30,31 +31,31 @@ export default function Home() {
     return "Squad Player";
   }
 
-  // 🧮 SCORING SYSTEM (BALANCED)
+  // 🧮 FIXED SCORING SYSTEM
   function calculateScore(p: any) {
     let statScore = 50;
 
     if (p.pos.includes("GK")) {
-      statScore = p.savePct * 0.7 + p.cleanSheets * 2;
+      statScore = p.savePct * 0.6 + p.cleanSheets * 1.5;
     } else if (p.pos.includes("CB")) {
-      statScore = p.tackles * 3 + p.interceptions * 3 + p.aerials * 2;
+      statScore = p.tackles * 2 + p.interceptions * 2 + p.aerials * 1.5;
     } else if (p.pos.includes("CM")) {
-      statScore = p.keyPasses * 3 + p.assists * 5;
+      statScore = p.keyPasses * 2 + p.assists * 4;
     } else if (p.pos.includes("ST")) {
-      statScore = p.goals * 6 + p.xg * 3 + p.shots * 1.2;
+      statScore = p.goals * 4 + p.xg * 2 + p.shots * 0.8;
     }
 
-    const ageScore = 100 - Math.abs(24 - p.age) * 1.5;
-    const valueScore = 100 - Math.log10(p.value + 1) * 7;
-    const wageScore = 100 - Math.log10(p.wage + 1) * 9;
+    const ageScore = 100 - Math.abs(25 - p.age) * 2;
+    const valueScore = 100 - Math.log10(p.value + 1) * 10;
+    const wageScore = 100 - Math.log10(p.wage + 1) * 12;
 
     return Math.max(
-      60,
+      50,
       Math.min(
-        99,
+        95,
         Math.round(
-          statScore * 0.5 +
-          ageScore * 0.2 +
+          statScore * 0.55 +
+          ageScore * 0.15 +
           valueScore * 0.15 +
           wageScore * 0.15
         )
@@ -62,7 +63,7 @@ export default function Home() {
     );
   }
 
-  // 📊 STAT BAR COMPONENT
+  // 📊 STAT BAR
   function Stat({ label, value, max }: any) {
     const percent = Math.min(100, (value / max) * 100);
 
@@ -96,7 +97,7 @@ export default function Home() {
     );
   }
 
-  // 📂 FILE PARSER (FIXED)
+  // 📂 CSV PARSER
   function handleFile(e: any) {
     const file = e.target.files[0];
     if (!file) return;
@@ -163,7 +164,14 @@ export default function Home() {
     reader.readAsText(file);
   }
 
-  const sorted = [...players].sort((a, b) => b.score - a.score);
+  // 🔄 SORTING
+  const sorted = [...players].sort((a, b) => {
+    if (sortBy === "value") return a.value - b.value;
+    if (sortBy === "wage") return a.wage - b.wage;
+    if (sortBy === "age") return a.age - b.age;
+    return b.score - a.score;
+  });
+
   const top = sorted[0];
   const gems = sorted.filter(p => p.score > 85 && p.value < 5000000);
 
@@ -180,6 +188,18 @@ export default function Home() {
       </h1>
 
       <input type="file" onChange={handleFile} />
+
+      {/* SORT */}
+      <select
+        value={sortBy}
+        onChange={(e) => setSortBy(e.target.value)}
+        style={{ marginLeft: 10 }}
+      >
+        <option value="score">Sort by Score</option>
+        <option value="value">Sort by Value</option>
+        <option value="wage">Sort by Wage</option>
+        <option value="age">Sort by Age</option>
+      </select>
 
       {/* HERO */}
       {top && (
@@ -300,6 +320,19 @@ export default function Home() {
             }}>
               {p.insight}
             </div>
+
+            {/* SIGN BUTTON */}
+            <button style={{
+              marginTop: 10,
+              padding: "6px 10px",
+              background: "#22c55e",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}>
+              ➕ Sign Player
+            </button>
           </div>
         ))}
       </div>

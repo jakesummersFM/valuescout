@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 export default function Home() {
-  const [players, setPlayers] = useState<any[]>([];
+  const [players, setPlayers] = useState<any[]>([]);
 
   function getInsight(p: any) {
     if (p.score > 85 && p.value < 5000000) return "💎 Undervalued Gem";
@@ -16,25 +16,21 @@ export default function Home() {
   function calculateScore(p: any) {
     let score = 0;
 
-    // AGE
     const ageScore =
       p.age <= 21 ? 25 :
       p.age <= 25 ? 20 :
       p.age <= 29 ? 10 : 5;
 
-    // VALUE (lower = better)
     const valueScore =
       p.value < 1000000 ? 25 :
       p.value < 5000000 ? 20 :
       p.value < 20000000 ? 10 : 5;
 
-    // WAGE
     const wageScore =
       p.wage < 10000 ? 25 :
       p.wage < 50000 ? 20 :
       p.wage < 100000 ? 10 : 5;
 
-    // PERFORMANCE (if exists)
     const statScore = p.stat ? Math.min(p.stat, 25) : 10;
 
     score = ageScore + valueScore + wageScore + statScore;
@@ -48,31 +44,35 @@ export default function Home() {
 
     const reader = new FileReader();
     reader.onload = (event: any) => {
-      const text = event.target.result;
+      const text = event.target.result as string;
       const rows = text.split("\n").slice(1);
 
-      const parsed = rows.map((row: string) => {
-        const cols = row.split(",");
+      const parsed = rows
+        .map((row: string) => {
+          const cols = row.split(",");
 
-        const player = {
-          name: cols[0],
-          pos: cols[1],
-          age: Number(cols[2]) || 0,
-          wage: Number(cols[3]) || 0,
-          value: Number(cols[4]) || 0,
-          stat: Number(cols[5]) || 10,
-        };
+          if (cols.length < 5) return null;
 
-        const score = calculateScore(player);
+          const player = {
+            name: cols[0],
+            pos: cols[1],
+            age: Number(cols[2]) || 0,
+            wage: Number(cols[3]) || 0,
+            value: Number(cols[4]) || 0,
+            stat: Number(cols[5]) || 10,
+          };
 
-        return {
-          ...player,
-          score,
-          insight: getInsight({ ...player, score }),
-        };
-      });
+          const score = calculateScore(player);
 
-      setPlayers(parsed);
+          return {
+            ...player,
+            score,
+            insight: getInsight({ ...player, score }),
+          };
+        })
+        .filter(Boolean);
+
+      setPlayers(parsed as any[]);
     };
 
     reader.readAsText(file);
@@ -80,25 +80,31 @@ export default function Home() {
 
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const topPlayers = sorted.slice(0, 3);
+
   const bargains = sorted
-    .filter(p => p.value < 5000000 && p.score > 75)
+    .filter((p) => p.value < 5000000 && p.score > 75)
     .slice(0, 5);
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      padding: "40px",
-      color: "white",
-      background: "radial-gradient(circle at top, #4c1d95, #1e1b4b, #000)",
-      fontFamily: "Arial"
-    }}>
-      <h1 style={{
-        fontSize: 48,
-        fontWeight: 800,
-        background: "linear-gradient(90deg, #a855f7, #9333ea)",
-        WebkitBackgroundClip: "text",
-        color: "transparent"
-      }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        padding: "40px",
+        color: "white",
+        background:
+          "radial-gradient(circle at top, #4c1d95, #1e1b4b, #000)",
+        fontFamily: "Arial",
+      }}
+    >
+      <h1
+        style={{
+          fontSize: 48,
+          fontWeight: 800,
+          background: "linear-gradient(90deg, #a855f7, #9333ea)",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+        }}
+      >
         ⚽ ValueScout 💰
       </h1>
 
@@ -120,15 +126,20 @@ export default function Home() {
 
           <div style={{ display: "flex", gap: 20 }}>
             {topPlayers.map((p, i) => (
-              <div key={i} style={{
-                flex: 1,
-                background: "rgba(255,255,255,0.05)",
-                padding: 20,
-                borderRadius: 10
-              }}>
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  background: "rgba(255,255,255,0.05)",
+                  padding: 20,
+                  borderRadius: 10,
+                }}
+              >
                 <h3>{p.name}</h3>
                 <p>{p.pos}</p>
-                <p><strong>{p.score}</strong></p>
+                <p>
+                  <strong>{p.score}</strong>
+                </p>
                 <p>{p.insight}</p>
               </div>
             ))}

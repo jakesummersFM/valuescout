@@ -5,37 +5,29 @@ import { useState } from "react";
 export default function Home() {
   const [players, setPlayers] = useState<any[]>([]);
 
-  function getInsight(p: any) {
-    if (p.score > 85 && p.value < 5000000) return "💎 Undervalued Gem";
-    if (p.score > 80) return "🔥 Elite Player";
-    if (p.age < 21 && p.score > 70) return "📈 High Potential";
-    if (p.wage > 100000 && p.score < 60) return "💸 Overpriced";
-    return "⚖️ Decent Option";
+  function calculateScore(p: any) {
+    let score = 50;
+
+    // Core stats (example logic)
+    score += (100 - p.age);
+    score += (10000000 - p.value) / 200000;
+    score += (100000 - p.wage) / 2000;
+
+    // Position weighting
+    if (p.pos === "ST") score += 5;
+    if (p.pos === "CB") score += 3;
+    if (p.pos === "GK") score -= 2;
+
+    return Math.max(1, Math.min(100, Math.round(score)));
   }
 
-  function calculateScore(p: any) {
-    let score = 0;
-
-    const ageScore =
-      p.age <= 21 ? 25 :
-      p.age <= 25 ? 20 :
-      p.age <= 29 ? 10 : 5;
-
-    const valueScore =
-      p.value < 1000000 ? 25 :
-      p.value < 5000000 ? 20 :
-      p.value < 20000000 ? 10 : 5;
-
-    const wageScore =
-      p.wage < 10000 ? 25 :
-      p.wage < 50000 ? 20 :
-      p.wage < 100000 ? 10 : 5;
-
-    const statScore = p.stat ? Math.min(p.stat, 25) : 10;
-
-    score = ageScore + valueScore + wageScore + statScore;
-
-    return Math.min(score, 100);
+  function getInsight(p: any) {
+    if (p.score > 90 && p.value < 3000000) return "💎 Undervalued Gem";
+    if (p.score > 85) return "🔥 Elite Player";
+    if (p.score > 75 && p.value > 50000000) return "⭐ Elite (Expensive)";
+    if (p.age < 21 && p.score > 70) return "📈 High Potential";
+    if (p.wage > 100000 && p.score < 65) return "💸 Overpriced";
+    return "⚖️ Decent Option";
   }
 
   function handleFile(e: any) {
@@ -43,117 +35,117 @@ export default function Home() {
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = (event: any) => {
-      const text = event.target.result as string;
+      const text = event.target.result;
       const rows = text.split("\n").slice(1);
 
       const parsed = rows
         .map((row: string) => {
           const cols = row.split(",");
 
-          if (cols.length < 5) return null;
-
-          const player = {
+          const p = {
             name: cols[0],
             pos: cols[1],
-            age: Number(cols[2]) || 0,
-            wage: Number(cols[3]) || 0,
-            value: Number(cols[4]) || 0,
-            stat: Number(cols[5]) || 10,
+            age: Number(cols[2]),
+            wage: Number(cols[3]),
+            value: Number(cols[4]),
           };
 
-          const score = calculateScore(player);
+          const score = calculateScore(p);
 
           return {
-            ...player,
+            ...p,
             score,
-            insight: getInsight({ ...player, score }),
+            insight: getInsight({ ...p, score }),
           };
         })
-        .filter(Boolean);
+        .filter((p: any) => p.name);
 
-      setPlayers(parsed as any[]);
+      setPlayers(parsed);
     };
 
     reader.readAsText(file);
   }
 
-  const sorted = [...players].sort((a, b) => b.score - a.score);
-  const topPlayers = sorted.slice(0, 3);
+  function shareToTwitter() {
+    if (players.length === 0) return;
 
-  const bargains = sorted
-    .filter((p) => p.value < 5000000 && p.score > 75)
-    .slice(0, 5);
+    const top = [...players]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    const text = `I just found some insane hidden gems using ValueScout 💎
+
+🔥 ${top[0]?.name} (${top[0]?.score}) - £${top[0]?.value}
+🔥 ${top[1]?.name} (${top[1]?.score}) - £${top[1]?.value}
+🔥 ${top[2]?.name} (${top[2]?.score}) - £${top[2]?.value}
+
+Try it yourself 👇
+https://valuescout-6g6v.vercel.app/`;
+
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank");
+  }
+
+  const sorted = [...players].sort((a, b) => b.score - a.score);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        padding: "40px",
-        color: "white",
-        background:
-          "radial-gradient(circle at top, #4c1d95, #1e1b4b, #000)",
-        fontFamily: "Arial",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: 48,
-          fontWeight: 800,
-          background: "linear-gradient(90deg, #a855f7, #9333ea)",
-          WebkitBackgroundClip: "text",
-          color: "transparent",
-        }}
-      >
-        ⚽ ValueScout 💰
-      </h1>
-
-      <p style={{ color: "#c4b5fd", marginBottom: 30 }}>
-        AI-powered Moneyball scouting for Football Manager
-      </p>
+    <main style={{ padding: 30, color: "white", background: "#0f172a", minHeight: "100vh" }}>
+      <h1 style={{ fontSize: 32 }}>ValueScout 💰</h1>
+      <p>AI-powered Moneyball scouting</p>
 
       <input type="file" onChange={handleFile} />
 
-      {players.length === 0 && (
-        <div style={{ marginTop: 60, color: "#9ca3af" }}>
-          Upload your scouting CSV to begin
-        </div>
-      )}
+      <br /><br />
+
+      <button
+        onClick={shareToTwitter}
+        style={{
+          padding: "10px 20px",
+          background: "#1DA1F2",
+          border: "none",
+          borderRadius: 8,
+          color: "white",
+          cursor: "pointer",
+        }}
+      >
+        🐦 Share Results
+      </button>
 
       {players.length > 0 && (
         <>
           <h2 style={{ marginTop: 40 }}>🔥 Top Players</h2>
 
-          <div style={{ display: "flex", gap: 20 }}>
-            {topPlayers.map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  background: "rgba(255,255,255,0.05)",
-                  padding: 20,
-                  borderRadius: 10,
-                }}
-              >
-                <h3>{p.name}</h3>
-                <p>{p.pos}</p>
-                <p>
-                  <strong>{p.score}</strong>
-                </p>
-                <p>{p.insight}</p>
-              </div>
-            ))}
-          </div>
-
-          <h2 style={{ marginTop: 40 }}>💎 Best Bargains</h2>
-
-          {bargains.map((p, i) => (
+          {sorted.slice(0, 3).map((p, i) => (
             <div key={i}>
-              {p.name} — £{p.value} — {p.insight}
+              {p.name} — {p.pos} — {p.score} — {p.insight}
             </div>
           ))}
 
-          <h2 style={{ marginTop: 40 }}>All Players</h2>
+          <h2 style={{ marginTop: 40 }}>💰 Best Bargains</h2>
+
+          {sorted
+            .filter((p) => p.value < 5000000)
+            .slice(0, 5)
+            .map((p, i) => (
+              <div key={i}>
+                {p.name} — £{p.value} — {p.insight}
+              </div>
+            ))}
+
+          <h2 style={{ marginTop: 40 }}>🎯 Best Signing Under £5M</h2>
+
+          {sorted
+            .filter((p) => p.value < 5000000)
+            .slice(0, 1)
+            .map((p, i) => (
+              <div key={i}>
+                {p.name} — {p.pos} — {p.score} — {p.insight}
+              </div>
+            ))}
+
+          <h2 style={{ marginTop: 40 }}>📊 All Players</h2>
 
           <table style={{ width: "100%", marginTop: 20 }}>
             <thead>
@@ -167,7 +159,6 @@ export default function Home() {
                 <th>Insight</th>
               </tr>
             </thead>
-
             <tbody>
               {sorted.map((p, i) => (
                 <tr key={i}>
@@ -176,7 +167,17 @@ export default function Home() {
                   <td>{p.age}</td>
                   <td>£{p.wage}</td>
                   <td>£{p.value}</td>
-                  <td>{p.score}</td>
+                  <td
+                    style={{
+                      fontWeight: "bold",
+                      color:
+                        p.score > 85 ? "#22c55e" :
+                        p.score > 70 ? "#eab308" :
+                        "#ef4444"
+                    }}
+                  >
+                    {p.score}
+                  </td>
                   <td>{p.insight}</td>
                 </tr>
               ))}
@@ -184,6 +185,6 @@ export default function Home() {
           </table>
         </>
       )}
-    </div>
+    </main>
   );
 }

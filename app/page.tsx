@@ -7,7 +7,6 @@ export default function Home() {
   const [budget, setBudget] = useState(5000000);
   const [position, setPosition] = useState("ALL");
 
-  // 💰 Format money
   function formatMoney(num: number) {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
@@ -16,25 +15,30 @@ export default function Home() {
     }).format(num);
   }
 
-  // 🧠 ELITE SCORING (FIXED DISTRIBUTION)
+  // 🧠 BALANCED SCORING (FIXED AGAIN)
   function calculateScore(p: any) {
-    const ageScore = 100 - Math.abs(24 - p.age) * 4;
-    const valueScore = 100 - Math.log10(p.value + 1) * 20;
-    const wageScore = 100 - Math.log10(p.wage + 1) * 25;
+    // Age (peak 24)
+    const ageScore = 100 - Math.abs(24 - p.age) * 2;
+
+    // Value (scaled softer)
+    const valueScore = 100 - Math.log10(p.value + 1) * 10;
+
+    // Wage (scaled softer)
+    const wageScore = 100 - Math.log10(p.wage + 1) * 12;
 
     let score =
       ageScore * 0.4 +
       valueScore * 0.3 +
       wageScore * 0.3;
 
+    // Position tweaks
     if (p.pos === "ST") score += 2;
     if (p.pos === "CB") score += 1;
     if (p.pos === "GK") score -= 2;
 
-    return Math.max(1, Math.min(99, Math.round(score)));
+    return Math.max(40, Math.min(99, Math.round(score)));
   }
 
-  // 🔥 INSIGHTS
   function getInsight(p: any) {
     if (p.score > 90 && p.value < 3000000) return "💎 Hidden Gem";
     if (p.score > 85 && p.value < 10000000) return "💰 Best Value";
@@ -45,7 +49,6 @@ export default function Home() {
     return "⚖️ Squad Option";
   }
 
-  // 📂 CLEAN CSV PARSER
   function handleFile(e: any) {
     const file = e.target.files[0];
     if (!file) return;
@@ -91,7 +94,6 @@ export default function Home() {
     reader.readAsText(file);
   }
 
-  // 🐦 SHARE
   function shareToTwitter() {
     if (players.length === 0) return;
 
@@ -111,7 +113,6 @@ https://valuescout-6g6v.vercel.app/`;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
   }
 
-  // 🎯 FILTERS
   const filtered = players.filter((p) => {
     return (position === "ALL" || p.pos === position) && p.value <= budget;
   });
@@ -119,13 +120,21 @@ https://valuescout-6g6v.vercel.app/`;
   const sorted = [...filtered].sort((a, b) => b.score - a.score);
 
   return (
-    <main style={{ padding: 30, background: "#0f172a", color: "white", minHeight: "100vh" }}>
-      <h1>ValueScout 💰</h1>
-      <p>Elite Moneyball Analysis</p>
+    <main
+      style={{
+        padding: 30,
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #0f172a, #1e293b)",
+        color: "white",
+        fontFamily: "system-ui",
+      }}
+    >
+      <h1 style={{ fontSize: 36, fontWeight: "bold" }}>ValueScout 💎</h1>
+      <p style={{ opacity: 0.7 }}>Elite Moneyball Analysis</p>
 
-      <input type="file" onChange={handleFile} />
+      <input type="file" onChange={handleFile} style={{ marginTop: 20 }} />
 
-      {/* 🎯 FILTERS */}
+      {/* FILTERS */}
       <div style={{ marginTop: 20 }}>
         <label>Budget: {formatMoney(budget)}</label>
         <input
@@ -141,7 +150,14 @@ https://valuescout-6g6v.vercel.app/`;
         <select
           value={position}
           onChange={(e) => setPosition(e.target.value)}
-          style={{ marginTop: 10 }}
+          style={{
+            marginTop: 10,
+            padding: 8,
+            borderRadius: 6,
+            background: "#1e293b",
+            color: "white",
+            border: "none",
+          }}
         >
           <option value="ALL">All Positions</option>
           <option value="ST">ST</option>
@@ -152,47 +168,100 @@ https://valuescout-6g6v.vercel.app/`;
         </select>
       </div>
 
-      <button onClick={shareToTwitter} style={{ marginTop: 20 }}>
+      <button
+        onClick={shareToTwitter}
+        style={{
+          marginTop: 20,
+          padding: "10px 20px",
+          borderRadius: 8,
+          border: "none",
+          background: "#38bdf8",
+          color: "#0f172a",
+          fontWeight: "bold",
+          cursor: "pointer",
+        }}
+      >
         🐦 Share Results
       </button>
 
-      {/* 🔥 TOP CARDS */}
+      {/* RESULTS */}
       {sorted.length > 0 && (
         <>
-          <h2>🔥 Top Targets</h2>
+          <h2 style={{ marginTop: 40 }}>🔥 Top Targets</h2>
 
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            {sorted.slice(0, 5).map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: 15,
-                  borderRadius: 10,
-                  background: "#1e293b",
-                  minWidth: 200,
-                }}
-              >
-                <h3>{p.name}</h3>
-                <p>{p.pos}</p>
-                <p style={{ fontSize: 22, fontWeight: "bold" }}>{p.score}</p>
-                <p>{p.insight}</p>
-              </div>
-            ))}
+            {sorted.slice(0, 5).map((p, i) => {
+              const initials = p.name
+                .split(" ")
+                .map((n: string) => n[0])
+                .join("");
+
+              const scoreColor =
+                p.score > 85 ? "#22c55e" :
+                p.score > 70 ? "#eab308" :
+                "#ef4444";
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    padding: 20,
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.05)",
+                    backdropFilter: "blur(10px)",
+                    minWidth: 220,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: "50%",
+                      background: "#38bdf8",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: "bold",
+                      marginBottom: 10,
+                    }}
+                  >
+                    {initials}
+                  </div>
+
+                  <h3>{p.name}</h3>
+                  <p style={{ opacity: 0.7 }}>{p.pos}</p>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: "5px 10px",
+                      borderRadius: 20,
+                      background: scoreColor,
+                      color: "black",
+                      display: "inline-block",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {p.score}
+                  </div>
+
+                  <p style={{ marginTop: 10 }}>{p.insight}</p>
+                </div>
+              );
+            })}
           </div>
 
-          {/* 💎 BEST VALUE */}
           <h3 style={{ marginTop: 30 }}>💎 Best Value Pick</h3>
           {sorted[0] && (
-            <div>
+            <div style={{ opacity: 0.8 }}>
               {sorted[0].name} — {formatMoney(sorted[0].value)} — {sorted[0].score}
             </div>
           )}
 
-          {/* 📊 TABLE */}
           <h2 style={{ marginTop: 40 }}>📊 All Players</h2>
 
           <table style={{ width: "100%", marginTop: 20 }}>
-            <thead>
+            <thead style={{ opacity: 0.7 }}>
               <tr>
                 <th>Name</th>
                 <th>Pos</th>
@@ -204,24 +273,26 @@ https://valuescout-6g6v.vercel.app/`;
               </tr>
             </thead>
             <tbody>
-              {sorted.map((p, i) => (
-                <tr key={i}>
-                  <td>{p.name}</td>
-                  <td>{p.pos}</td>
-                  <td>{p.age}</td>
-                  <td>{formatMoney(p.wage)}</td>
-                  <td>{formatMoney(p.value)}</td>
-                  <td style={{
-                    color:
-                      p.score > 85 ? "#22c55e" :
-                      p.score > 70 ? "#eab308" :
-                      "#ef4444"
-                  }}>
-                    {p.score}
-                  </td>
-                  <td>{p.insight}</td>
-                </tr>
-              ))}
+              {sorted.map((p, i) => {
+                const scoreColor =
+                  p.score > 85 ? "#22c55e" :
+                  p.score > 70 ? "#eab308" :
+                  "#ef4444";
+
+                return (
+                  <tr key={i}>
+                    <td>{p.name}</td>
+                    <td>{p.pos}</td>
+                    <td>{p.age}</td>
+                    <td>{formatMoney(p.wage)}</td>
+                    <td>{formatMoney(p.value)}</td>
+                    <td style={{ color: scoreColor, fontWeight: "bold" }}>
+                      {p.score}
+                    </td>
+                    <td>{p.insight}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </>

@@ -5,55 +5,46 @@ import { useState } from "react";
 export default function Home() {
   const [players, setPlayers] = useState<any[]>([]);
 
+  // 💰 FORMAT MONEY
   function formatMoney(num: number) {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: "GBP",
       notation: "compact",
-    }).format(num);
+    }).format(num || 0);
   }
 
+  // 🎨 SCORE COLOR
   function getScoreColor(score: number) {
     if (score >= 85) return "#22c55e";
     if (score >= 70) return "#f59e0b";
     return "#ef4444";
   }
 
+  // 🧠 INSIGHT ENGINE
   function getInsight(p: any) {
-    if (p.pos.includes("ST") && p.goals > 15)
-      return "Elite Finisher";
-    if (p.pos.includes("CM") && p.keyPasses > 40)
-      return "Creative Playmaker";
-    if (p.pos.includes("CB") && p.tackles > 25)
-      return "Ball Winning Defender";
-    if (p.pos.includes("GK") && p.savePct > 75)
-      return "Shot Stopper";
+    if (p.pos.includes("ST") && p.goals > 15) return "Elite Finisher";
+    if (p.pos.includes("CM") && p.keyPasses > 40) return "Creative Playmaker";
+    if (p.pos.includes("CB") && p.tackles > 25) return "Ball Winning Defender";
+    if (p.pos.includes("GK") && p.savePct > 75) return "Shot Stopper";
     return "Squad Player";
   }
 
+  // 🧮 SCORING SYSTEM (BALANCED)
   function calculateScore(p: any) {
     let statScore = 50;
 
     if (p.pos.includes("GK")) {
       statScore = p.savePct * 0.7 + p.cleanSheets * 2;
     } else if (p.pos.includes("CB")) {
-      statScore =
-        p.tackles * 4 +
-        p.interceptions * 4 +
-        p.aerials * 3;
+      statScore = p.tackles * 3 + p.interceptions * 3 + p.aerials * 2;
     } else if (p.pos.includes("CM")) {
-      statScore =
-        p.passes * 1.5 +
-        p.keyPasses * 4 +
-        p.assists * 5;
+      statScore = p.keyPasses * 3 + p.assists * 5;
     } else if (p.pos.includes("ST")) {
-      statScore =
-        p.goals * 7 +
-        p.xg * 4 +
-        p.shots * 1.5;
+      statScore = p.goals * 6 + p.xg * 3 + p.shots * 1.2;
     }
 
-    const ageScore = 100 - Math.abs(24 - p.age) * 1.2;
+    const ageScore = 100 - Math.abs(24 - p.age) * 1.5;
     const valueScore = 100 - Math.log10(p.value + 1) * 7;
     const wageScore = 100 - Math.log10(p.wage + 1) * 9;
 
@@ -63,14 +54,49 @@ export default function Home() {
         99,
         Math.round(
           statScore * 0.5 +
-            ageScore * 0.2 +
-            valueScore * 0.15 +
-            wageScore * 0.15
+          ageScore * 0.2 +
+          valueScore * 0.15 +
+          wageScore * 0.15
         )
       )
     );
   }
 
+  // 📊 STAT BAR COMPONENT
+  function Stat({ label, value, max }: any) {
+    const percent = Math.min(100, (value / max) * 100);
+
+    return (
+      <div>
+        <div style={{
+          fontSize: 11,
+          display: "flex",
+          justifyContent: "space-between"
+        }}>
+          <span>{label}</span>
+          <span>{value}</span>
+        </div>
+
+        <div style={{
+          height: 6,
+          background: "#1f2937",
+          borderRadius: 4,
+          overflow: "hidden"
+        }}>
+          <div style={{
+            width: percent + "%",
+            height: "100%",
+            background:
+              percent > 70 ? "#22c55e" :
+              percent > 40 ? "#f59e0b" :
+              "#ef4444"
+          }} />
+        </div>
+      </div>
+    );
+  }
+
+  // 📂 FILE PARSER (FIXED)
   function handleFile(e: any) {
     const file = e.target.files[0];
     if (!file) return;
@@ -117,7 +143,6 @@ export default function Home() {
           interceptions: clean(cols[getIndex(["interception"])]),
           aerials: clean(cols[getIndex(["aerial"])]),
 
-          passes: clean(cols[getIndex(["pass"])]),
           keyPasses: clean(cols[getIndex(["key"])]),
           assists: clean(cols[getIndex(["assist"])]),
 
@@ -140,77 +165,141 @@ export default function Home() {
 
   const sorted = [...players].sort((a, b) => b.score - a.score);
   const top = sorted[0];
-  const gems = sorted.filter(
-    (p) => p.score > 85 && p.value < 5000000
-  );
+  const gems = sorted.filter(p => p.score > 85 && p.value < 5000000);
 
   return (
     <main style={{
       padding: 30,
-      background: "#0f172a",
+      background: "#0b1220",
       color: "white",
-      minHeight: "100vh"
+      minHeight: "100vh",
+      fontFamily: "system-ui"
     }}>
-      <h1 style={{ fontSize: 32 }}>ValueScout</h1>
+      <h1 style={{ fontSize: 34, marginBottom: 20 }}>
+        💎 ValueScout
+      </h1>
 
       <input type="file" onChange={handleFile} />
 
+      {/* HERO */}
       {top && (
         <div style={{
-          marginTop: 20,
+          marginTop: 25,
           padding: 20,
-          background: "#1e293b",
-          borderLeft: "5px solid #22c55e"
+          borderRadius: 12,
+          background: "#111827",
+          border: "1px solid #1f2937"
         }}>
           <h2>🏆 Best Bargain</h2>
-          {top.name} ({top.pos}) — {top.score}
-          <br />
-          {formatMoney(top.value)}
+          <div style={{ fontSize: 20, fontWeight: "bold" }}>
+            {top.name} ({top.pos})
+          </div>
+          <div>
+            💰 {formatMoney(top.value)} | 🧾 {formatMoney(top.wage)}
+          </div>
+          <div style={{ color: "#22c55e" }}>
+            {top.score} — {top.insight}
+          </div>
         </div>
       )}
 
+      {/* GEMS */}
       {gems.length > 0 && (
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 30 }}>
           <h2>💎 Hidden Gems</h2>
-          {gems.map((p, i) => (
-            <div key={i}>
-              {p.name} — {p.score}
-            </div>
-          ))}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {gems.slice(0, 6).map((p, i) => (
+              <div key={i} style={{
+                padding: "6px 10px",
+                background: "#1f2937",
+                borderRadius: 999,
+                fontSize: 12
+              }}>
+                {p.name} ({p.score})
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      <div style={{ marginTop: 30 }}>
-        {sorted.slice(0, 15).map((p, i) => (
+      {/* GRID */}
+      <div style={{
+        marginTop: 30,
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+        gap: 18
+      }}>
+        {sorted.slice(0, 20).map((p, i) => (
           <div key={i} style={{
-            padding: 15,
-            marginBottom: 10,
-            background: "#1e293b",
-            borderRadius: 8
+            background: "#111827",
+            borderRadius: 12,
+            padding: 18,
+            position: "relative",
+            border: "1px solid #1f2937"
           }}>
-            <strong>{p.name}</strong> ({p.pos}) — {p.age}
-            <br />
-
-            {p.pos.includes("ST") && (
-              <>Goals: {p.goals} | xG: {p.xg}</>
-            )}
-            {p.pos.includes("CM") && (
-              <>Key Passes: {p.keyPasses} | Assists: {p.assists}</>
-            )}
-            {p.pos.includes("CB") && (
-              <>Tackles: {p.tackles} | Interceptions: {p.interceptions}</>
-            )}
-            {p.pos.includes("GK") && (
-              <>Save %: {p.savePct} | CS: {p.cleanSheets}</>
-            )}
-
-            <br />
-            💰 {formatMoney(p.value)} | 🧾 {formatMoney(p.wage)}
-            <br />
-            <span style={{ color: getScoreColor(p.score) }}>
+            {/* SCORE */}
+            <div style={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              fontSize: 18,
+              fontWeight: "bold",
+              color: getScoreColor(p.score)
+            }}>
               {p.score}
-            </span>{" "}
-            — {p.insight}
+            </div>
+
+            <div style={{ fontSize: 18, fontWeight: "bold" }}>
+              {p.name}
+            </div>
+
+            <div style={{ opacity: 0.7, fontSize: 13 }}>
+              {p.pos} • Age {p.age}
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {p.pos.includes("ST") && (
+                <>
+                  <Stat label="Goals" value={p.goals} max={25} />
+                  <Stat label="xG" value={p.xg} max={20} />
+                  <Stat label="Shots" value={p.shots} max={100} />
+                </>
+              )}
+
+              {p.pos.includes("CM") && (
+                <>
+                  <Stat label="Key Passes" value={p.keyPasses} max={80} />
+                  <Stat label="Assists" value={p.assists} max={20} />
+                </>
+              )}
+
+              {p.pos.includes("CB") && (
+                <>
+                  <Stat label="Tackles" value={p.tackles} max={40} />
+                  <Stat label="Interceptions" value={p.interceptions} max={40} />
+                </>
+              )}
+
+              {p.pos.includes("GK") && (
+                <>
+                  <Stat label="Save %" value={p.savePct} max={100} />
+                  <Stat label="Clean Sheets" value={p.cleanSheets} max={25} />
+                </>
+              )}
+            </div>
+
+            <div style={{ marginTop: 12, fontSize: 13 }}>
+              💰 {formatMoney(p.value)} <br />
+              🧾 {formatMoney(p.wage)}
+            </div>
+
+            <div style={{
+              marginTop: 10,
+              fontSize: 13,
+              color: "#22c55e"
+            }}>
+              {p.insight}
+            </div>
           </div>
         ))}
       </div>

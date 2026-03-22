@@ -136,93 +136,82 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen relative text-white overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-black text-white p-8">
 
-      {/* BACKGROUND */}
-      <div className="absolute inset-0 bg-gradient-to-br from-black via-purple-950 to-black" />
+      {/* HEADER */}
+      <h1 className="text-4xl font-bold text-purple-400 mb-2">
+        ValueScout 💰
+      </h1>
+      <p className="text-gray-400 mb-8">
+        Find elite performance at low cost
+      </p>
 
-      {/* Glow Effects */}
-      <div className="absolute top-[-200px] left-[-200px] w-[500px] h-[500px] bg-purple-600 opacity-20 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-200px] right-[-200px] w-[500px] h-[500px] bg-pink-600 opacity-20 rounded-full blur-3xl" />
-
-      {/* CONTENT */}
-      <div className="relative z-10 p-8">
-
-        {/* HEADER */}
-        <h1 className="text-4xl font-bold text-purple-400 mb-2">
-          ValueScout 💰
-        </h1>
-        <p className="text-gray-400 mb-8">
-          Find elite performance at low cost
-        </p>
-
-        {/* TOP PLAYER */}
-        {top && (
-          <div className="bg-purple-800/30 backdrop-blur-md p-6 rounded-2xl mb-8 border border-purple-500 shadow-lg">
-            <p className="text-sm text-gray-300">Top Value Player</p>
-            <h2 className="text-2xl font-bold">{top.name}</h2>
-            <p className="text-gray-300">
-              £{top.wage} • {top.pos} • Age {top.age}
-            </p>
-            <p className={`text-2xl font-bold mt-2 ${getColor(top.value)}`}>
-              Value Score: {top.value}
-            </p>
-          </div>
-        )}
-
-        {/* CONTROLS */}
-        <div className="flex gap-4 mb-6">
-          <input
-            type="file"
-            onChange={handleFile}
-            className="bg-purple-700/50 p-2 rounded cursor-pointer"
-          />
-
-          <input
-            placeholder="Search player..."
-            className="bg-black/50 border border-purple-500 p-2 rounded w-64"
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* TOP PLAYER */}
+      {top && (
+        <div className="bg-purple-800/30 backdrop-blur-md p-6 rounded-2xl mb-8 border border-purple-500 shadow-lg">
+          <p className="text-sm text-gray-300">Top Value Player</p>
+          <h2 className="text-2xl font-bold">{top.name}</h2>
+          <p className="text-gray-300">
+            £{top.wage} • {top.pos} • Age {top.age}
+          </p>
+          <p className={`text-2xl font-bold mt-2 ${getColor(top.value)}`}>
+            Value Score: {top.value}
+          </p>
         </div>
+      )}
 
-        {/* TABLE */}
-        <div className="overflow-x-auto rounded-xl border border-purple-800">
-          <table className="w-full text-left">
-            <thead className="bg-purple-900/70">
-              <tr>
-                <th className="p-3">Player</th>
-                <th className="p-3">Pos</th>
-                <th className="p-3">Age</th>
-                <th className="p-3">Wage</th>
-                <th className="p-3">Value</th>
-              </tr>
-            </thead>
+      {/* CONTROLS */}
+      <div className="flex gap-4 mb-6">
+        <input
+          type="file"
+          onChange={handleFile}
+          className="bg-purple-700/50 p-2 rounded cursor-pointer"
+        />
 
-            <tbody>
-              {filtered.map((p, i) => (
-                <tr
-                  key={i}
-                  className="border-t border-purple-800 hover:bg-purple-800/30 transition"
-                >
-                  <td className="p-3 font-semibold">{p.name}</td>
-                  <td className="p-3">{p.pos}</td>
-                  <td className="p-3">{p.age}</td>
-                  <td className="p-3">£{p.wage}</td>
-                  <td className={`p-3 font-bold ${getColor(p.value)}`}>
-                    {p.value}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* FOOTER */}
-        <div className="mt-10 text-center text-gray-500 text-sm">
-          Moneyball Analytics • ValueScout ⚽
-        </div>
-
+        <input
+          placeholder="Search player..."
+          className="bg-black/50 border border-purple-500 p-2 rounded w-64"
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
+
+      {/* TABLE */}
+      <div className="overflow-x-auto rounded-xl border border-purple-800">
+        <table className="w-full text-left">
+          <thead className="bg-purple-900/70">
+            <tr>
+              <th className="p-3">Player</th>
+              <th className="p-3">Pos</th>
+              <th className="p-3">Age</th>
+              <th className="p-3">Wage</th>
+              <th className="p-3">Value</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filtered.map((p, i) => (
+              <tr
+                key={i}
+                className="border-t border-purple-800 hover:bg-purple-800/30 transition"
+              >
+                <td className="p-3 font-semibold">{p.name}</td>
+                <td className="p-3">{p.pos}</td>
+                <td className="p-3">{p.age}</td>
+                <td className="p-3">£{p.wage}</td>
+                <td className={`p-3 font-bold ${getColor(p.value)}`}>
+                  {p.value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* FOOTER */}
+      <div className="mt-10 text-center text-gray-500 text-sm">
+        Moneyball Analytics • ValueScout ⚽
+      </div>
+
     </div>
   );
 }

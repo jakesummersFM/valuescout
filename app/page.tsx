@@ -4,57 +4,68 @@ import { useState } from "react";
 
 export default function Home() {
   const [players, setPlayers] = useState<any[]>([]);
-  const [budget, setBudget] = useState(5000000);
 
   function formatMoney(num: number) {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency: "GBP",
-      minimumFractionDigits: 0,
+      notation: "compact",
     }).format(num);
   }
 
   function getScoreColor(score: number) {
-    if (score > 85) return "#22c55e";
-    if (score > 70) return "#f59e0b";
+    if (score >= 85) return "#22c55e";
+    if (score >= 70) return "#f59e0b";
     return "#ef4444";
+  }
+
+  function getInsight(p: any) {
+    if (p.pos.includes("ST") && p.goals > 15)
+      return "Elite Finisher";
+    if (p.pos.includes("CM") && p.keyPasses > 40)
+      return "Creative Playmaker";
+    if (p.pos.includes("CB") && p.tackles > 25)
+      return "Ball Winning Defender";
+    if (p.pos.includes("GK") && p.savePct > 75)
+      return "Shot Stopper";
+    return "Squad Player";
   }
 
   function calculateScore(p: any) {
     let statScore = 50;
 
-    if (p.pos?.includes("GK")) {
-      statScore = (p.savePct || 0) * 0.6 + (p.cleanSheets || 0) * 2;
-    } else if (p.pos?.includes("CB")) {
+    if (p.pos.includes("GK")) {
+      statScore = p.savePct * 0.7 + p.cleanSheets * 2;
+    } else if (p.pos.includes("CB")) {
       statScore =
-        (p.tackles || 0) * 5 +
-        (p.interceptions || 0) * 5 +
-        (p.aerials || 0) * 3;
-    } else if (p.pos?.includes("CM")) {
+        p.tackles * 4 +
+        p.interceptions * 4 +
+        p.aerials * 3;
+    } else if (p.pos.includes("CM")) {
       statScore =
-        (p.passes || 0) * 2 +
-        (p.keyPasses || 0) * 4 +
-        (p.assists || 0) * 6;
-    } else if (p.pos?.includes("ST")) {
+        p.passes * 1.5 +
+        p.keyPasses * 4 +
+        p.assists * 5;
+    } else if (p.pos.includes("ST")) {
       statScore =
-        (p.goals || 0) * 8 +
-        (p.xg || 0) * 5 +
-        (p.shots || 0) * 2;
+        p.goals * 7 +
+        p.xg * 4 +
+        p.shots * 1.5;
     }
 
-    const ageScore = 100 - Math.abs(24 - p.age) * 1.5;
-    const valueScore = 100 - Math.log10(p.value + 1) * 8;
-    const wageScore = 100 - Math.log10(p.wage + 1) * 10;
+    const ageScore = 100 - Math.abs(24 - p.age) * 1.2;
+    const valueScore = 100 - Math.log10(p.value + 1) * 7;
+    const wageScore = 100 - Math.log10(p.wage + 1) * 9;
 
     return Math.max(
-      50,
+      60,
       Math.min(
         99,
         Math.round(
-          statScore * 0.4 +
-          ageScore * 0.2 +
-          valueScore * 0.2 +
-          wageScore * 0.2
+          statScore * 0.5 +
+            ageScore * 0.2 +
+            valueScore * 0.15 +
+            wageScore * 0.15
         )
       )
     );
@@ -116,6 +127,8 @@ export default function Home() {
         };
 
         p.score = calculateScore(p);
+        p.insight = getInsight(p);
+
         return p;
       });
 
@@ -125,30 +138,20 @@ export default function Home() {
     reader.readAsText(file);
   }
 
-  const sorted = [...players]
-    .sort((a, b) => b.score - a.score);
-
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const top = sorted[0];
   const gems = sorted.filter(
     (p) => p.score > 85 && p.value < 5000000
   );
 
-  const top = sorted[0];
-
-  function share() {
-    if (!top) return;
-    const text = `💎 I found ${top.name} (${top.pos}) rated ${top.score} on ValueScout for just ${formatMoney(top.value)} 👀`;
-    navigator.clipboard.writeText(text);
-    alert("Copied for Twitter 🚀");
-  }
-
   return (
     <main style={{
       padding: 30,
-      minHeight: "100vh",
-      background: "linear-gradient(135deg,#0f172a,#1e1b4b,#312e81)",
-      color: "white"
+      background: "#0f172a",
+      color: "white",
+      minHeight: "100vh"
     }}>
-      <h1 style={{ fontSize: 36 }}>💎 ValueScout</h1>
+      <h1 style={{ fontSize: 32 }}>ValueScout</h1>
 
       <input type="file" onChange={handleFile} />
 
@@ -156,51 +159,58 @@ export default function Home() {
         <div style={{
           marginTop: 20,
           padding: 20,
-          borderRadius: 15,
-          background: "#22c55e",
-          color: "black"
+          background: "#1e293b",
+          borderLeft: "5px solid #22c55e"
         }}>
-          🏆 BEST BARGAIN: {top.name} — {top.score}
+          <h2>🏆 Best Bargain</h2>
+          {top.name} ({top.pos}) — {top.score}
           <br />
-          Value: {formatMoney(top.value)}
-          <br />
-          <button onClick={share}>Share 🚀</button>
+          {formatMoney(top.value)}
         </div>
       )}
 
       {gems.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 30 }}>💎 Hidden Gems</h2>
-          {gems.slice(0, 5).map((p, i) => (
+        <div style={{ marginTop: 20 }}>
+          <h2>💎 Hidden Gems</h2>
+          {gems.map((p, i) => (
             <div key={i}>
               {p.name} — {p.score}
             </div>
           ))}
-        </>
+        </div>
       )}
 
-      <div style={{ marginTop: 30, display: "grid", gap: 15 }}>
-        {sorted.slice(0, 20).map((p, i) => (
+      <div style={{ marginTop: 30 }}>
+        {sorted.slice(0, 15).map((p, i) => (
           <div key={i} style={{
-            padding: 20,
-            borderRadius: 15,
+            padding: 15,
+            marginBottom: 10,
             background: "#1e293b",
-            display: "flex",
-            justifyContent: "space-between"
+            borderRadius: 8
           }}>
-            <div>
-              <strong>{p.name}</strong> ({p.pos})<br/>
-              Age: {p.age}<br/>
-              Wage: {formatMoney(p.wage)}<br/>
-              Value: {formatMoney(p.value)}
-            </div>
+            <strong>{p.name}</strong> ({p.pos}) — {p.age}
+            <br />
 
-            <div style={{
-              fontSize: 28,
-              color: getScoreColor(p.score)
-            }}>
+            {p.pos.includes("ST") && (
+              <>Goals: {p.goals} | xG: {p.xg}</>
+            )}
+            {p.pos.includes("CM") && (
+              <>Key Passes: {p.keyPasses} | Assists: {p.assists}</>
+            )}
+            {p.pos.includes("CB") && (
+              <>Tackles: {p.tackles} | Interceptions: {p.interceptions}</>
+            )}
+            {p.pos.includes("GK") && (
+              <>Save %: {p.savePct} | CS: {p.cleanSheets}</>
+            )}
+
+            <br />
+            💰 {formatMoney(p.value)} | 🧾 {formatMoney(p.wage)}
+            <br />
+            <span style={{ color: getScoreColor(p.score) }}>
               {p.score}
-            </div>
+            </span>{" "}
+            — {p.insight}
           </div>
         ))}
       </div>

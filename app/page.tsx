@@ -38,11 +38,9 @@ export default function Home() {
         s3: safeNum(c[7]),
       };
 
+      // ✅ FIXED SCORING (0–100 RANGE)
       const score =
-        p.s1 * 0.4 +
-        p.s2 * 0.3 +
-        p.s3 * 0.3 -
-        p.value * 0.000001;
+        (p.s1 * 0.4 + p.s2 * 0.3 + p.s3 * 0.3) / 3;
 
       const role =
         p.pos === "ST"
@@ -71,7 +69,7 @@ export default function Home() {
   const gems = filtered.slice(0, 6);
 
   const color = (s: number) =>
-    s > 90 ? "#22c55e" : s > 75 ? "#facc15" : "#f87171";
+    s > 85 ? "#22c55e" : s > 70 ? "#facc15" : "#f87171";
 
   const labels = (pos: string) =>
     pos === "ST"
@@ -175,6 +173,8 @@ export default function Home() {
             background: "#020617",
             padding: 20,
             borderRadius: 12,
+            border: "2px solid #22c55e",
+            boxShadow: "0 0 10px #22c55e55",
           }}
         >
           🏆 Best Bargain
@@ -206,7 +206,17 @@ export default function Home() {
 
       {/* EXPORT */}
       {shortlist.length > 0 && (
-        <button onClick={exportCSV} style={{ marginTop: 10 }}>
+        <button
+          onClick={exportCSV}
+          style={{
+            marginTop: 10,
+            background: "#1e293b",
+            color: "white",
+            padding: "6px 12px",
+            borderRadius: 6,
+            border: "none",
+          }}
+        >
           ⬇️ Export Shortlist
         </button>
       )}
@@ -228,6 +238,12 @@ export default function Home() {
               background: "#020617",
               padding: 15,
               borderRadius: 12,
+              border:
+                p === best
+                  ? "2px solid #22c55e"
+                  : "1px solid #1e293b",
+              boxShadow:
+                p === best ? "0 0 10px #22c55e55" : "none",
             }}
           >
             <h3>

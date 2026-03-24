@@ -1,325 +1,193 @@
 "use client";
 import { useState } from "react";
 
-export default function Home() {
-  const [players, setPlayers] = useState<any[]>([]);
-  const [shortlist, setShortlist] = useState<any[]>([]);
-  const [compare, setCompare] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [age, setAge] = useState(40);
-  const [pos, setPos] = useState("All");
+type Player = {
+  name: string;
+  age: number;
+  pos: string;
+  nation?: string;
+  club?: string;
+  value?: string;
+  wage?: string;
+  stat1: number;
+  stat2: number;
+  stat3: number;
+  score?: number;
+  role?: string;
+};
 
-  // ✅ SAFE NUMBER PARSER
-  const safeNum = (val: any) => {
-    const n = Number(val);
-    return isNaN(n) ? 0 : n;
+export default function Home() {
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // 🔥 UNIVERSAL CSV PARSER
+  const parseCSV = (text: string): Player[] => {
+    const lines = text.split("\n").filter(l => l.trim() !== "");
+
+    const detectDelimiter = (row: string) => {
+      const comma = (row.match(/,/g) || []).length;
+      const semi = (row.match(/;/g) || []).length;
+      return semi > comma ? ";" : ",";
+    };
+
+    const delimiter = detectDelimiter(lines[0]);
+    const split = (row: string) => row.split(delimiter).map(c => c.trim());
+    const headers = split(lines[0]).map(h => h.toLowerCase());
+
+    const findCol = (names: string[]) =>
+      headers.findIndex(h => names.some(n => h.includes(n)));
+
+    const COL = {
+      name: findCol(["name", "player"]),
+      age: findCol(["age"]),
+      pos: findCol(["position"]),
+      nation: findCol(["nation"]),
+      club: findCol(["club"]),
+      value: findCol(["value"]),
+      wage: findCol(["wage"]),
+
+      stat1: findCol(["goals", "sv %", "saves", "tackles"]),
+      stat2: findCol(["assists", "xg", "interceptions"]),
+      stat3: findCol(["shots", "passes", "key passes"]),
+    };
+
+    const data: Player[] = lines.slice(1).map(row => {
+      const c = split(row);
+      const get = (i: number) => (i >= 0 ? c[i] : "");
+
+      return {
+        name: get(COL.name),
+        age: Number(get(COL.age)) || 0,
+        pos: get(COL.pos),
+        nation: get(COL.nation) || undefined,
+        club: get(COL.club) || undefined,
+        value: get(COL.value) || undefined,
+        wage: get(COL.wage) || undefined,
+
+        stat1: Number(get(COL.stat1)) || 0,
+        stat2: Number(get(COL.stat2)) || 0,
+        stat3: Number(get(COL.stat3)) || 0,
+      };
+    });
+
+    return data.filter(
+      p =>
+        p.name &&
+        p.pos &&
+        !p.name.toLowerCase().includes("name")
+    );
   };
 
-  // ✅ DISPLAY FIX
-  const display = (val: number) => (val === 0 ? "-" : val);
+  // 🔥 POSITION-BASED SCORING
+  const scorePlayer = (p: Player): Player => {
+    let score = 0;
+    let role = "Squad Player";
+
+    if (p.pos.includes("GK")) {
+      score = p.stat1 * 0.6 + p.stat2 * -0.2 + p.stat3 * 0.2;
+      role = "Shot Stopper";
+    } else if (p.pos.includes("ST")) {
+      score = p.stat1 * 0.6 + p.stat2 * 0.3 + p.stat3 * 0.1;
+      role = "Elite Finisher";
+    } else if (p.pos.includes("CM")) {
+      score = p.stat1 * 0.3 + p.stat2 * 0.5 + p.stat3 * 0.2;
+      role = "Playmaker";
+    } else if (p.pos.includes("CB")) {
+      score = p.stat1 * 0.5 + p.stat2 * 0.4 + p.stat3 * 0.1;
+      role = "Ball Winner";
+    }
+
+    return { ...p, score: Math.round(score), role };
+  };
 
   const handleFile = async (file: File) => {
     setLoading(true);
 
     const text = await file.text();
-    const rows = text.split("\n").slice(1);
+    let parsed = parseCSV(text);
 
-    const data = rows.map((r) => {
-      const c = r.split(",");
+    const positions = [...new Set(parsed.map(p => p.pos))];
+    if (positions.length > 1) {
+      alert("⚠️ Upload ONE position at a time for best results");
+    }
 
-      const p = {
-        name: c[0] || "Unknown",
-        age: safeNum(c[1]),
-        pos: c[2] || "N/A",
-        value: safeNum(c[3]),
-        wage: safeNum(c[4]),
-        s1: safeNum(c[5]),
-        s2: safeNum(c[6]),
-        s3: safeNum(c[7]),
-      };
+    parsed = parsed
+      .map(scorePlayer)
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
 
-      // ✅ FIXED SCORING (0–100 RANGE)
-      const score =
-        (p.s1 * 0.4 + p.s2 * 0.3 + p.s3 * 0.3) / 3;
-
-      const role =
-        p.pos === "ST"
-          ? "Elite Finisher"
-          : p.pos === "CM"
-          ? "Creative Playmaker"
-          : p.pos === "CB"
-          ? "Ball Winning Defender"
-          : p.pos === "GK"
-          ? "Shot Stopper"
-          : "Squad Player";
-
-      return { ...p, score, role };
-    });
-
-    setPlayers(data);
+    setPlayers(parsed);
     setLoading(false);
   };
 
-  const filtered = players
-    .filter((p) => p.age <= age)
-    .filter((p) => (pos === "All" ? true : p.pos === pos))
-    .sort((a, b) => b.score - a.score);
-
-  const best = filtered[0];
-  const gems = filtered.slice(0, 6);
-
-  const color = (s: number) =>
-    s > 85 ? "#22c55e" : s > 70 ? "#facc15" : "#f87171";
-
-  const labels = (pos: string) =>
-    pos === "ST"
-      ? ["Goals", "xG", "Shots"]
-      : pos === "CM"
-      ? ["Key Passes", "Assists", "Chances"]
-      : pos === "CB"
-      ? ["Tackles", "Interceptions", "Duels"]
-      : pos === "GK"
-      ? ["Saves", "Save %", "Clean Sheets"]
-      : ["Stat1", "Stat2", "Stat3"];
-
-  const toggleShort = (p: any) =>
-    setShortlist((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-    );
-
-  const toggleCompare = (p: any) =>
-    setCompare((prev) =>
-      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
-    );
-
-  const exportCSV = () => {
-    const csv =
-      "Name,Score\n" +
-      shortlist.map((p) => `${p.name},${p.score.toFixed(0)}`).join("\n");
-
-    const blob = new Blob([csv]);
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "shortlist.csv";
-    a.click();
-  };
+  const best = players[0];
+  const hidden = players.slice(0, 8);
 
   return (
-    <main
-      style={{
-        padding: 20,
-        background: "linear-gradient(180deg,#020617,#0f172a)",
-        color: "white",
-        minHeight: "100vh",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h1 style={{ fontSize: 28 }}>💎 FM Value Scout</h1>
+    <div style={{ padding: 20, background: "#020617", minHeight: "100vh", color: "white" }}>
+      <h1>💎 FM Value Scout</h1>
 
-      {/* UPLOAD */}
-      <div
-        onDrop={(e) => {
-          e.preventDefault();
-          handleFile(e.dataTransfer.files[0]);
-        }}
-        onDragOver={(e) => e.preventDefault()}
-        style={{
-          border: "2px dashed #334155",
-          padding: 20,
-          borderRadius: 12,
-          marginTop: 15,
-          textAlign: "center",
-        }}
-      >
-        Drag & Drop CSV
-        <br />
-        <input
-          type="file"
-          onChange={(e) => handleFile(e.target.files![0])}
-        />
-      </div>
+      <input
+        type="file"
+        onChange={(e) =>
+          e.target.files && handleFile(e.target.files[0])
+        }
+      />
 
-      {loading && (
-        <p style={{ marginTop: 10 }}>⚡ Processing data...</p>
-      )}
+      <p style={{ fontSize: 12, opacity: 0.7 }}>
+        ⚠️ Upload ONE position at a time (ST, CM, CB, GK)
+      </p>
 
-      {/* FILTERS */}
-      <div style={{ marginTop: 20 }}>
-        Age ≤ {age}
-        <input
-          type="range"
-          min="16"
-          max="40"
-          value={age}
-          onChange={(e) => setAge(Number(e.target.value))}
-        />
+      {loading && <p>Loading...</p>}
 
-        <select onChange={(e) => setPos(e.target.value)}>
-          <option>All</option>
-          <option>ST</option>
-          <option>CM</option>
-          <option>CB</option>
-          <option>GK</option>
-        </select>
-      </div>
-
-      {/* BEST BARGAIN */}
       {best && (
-        <div
-          style={{
-            marginTop: 20,
-            background: "#020617",
-            padding: 20,
-            borderRadius: 12,
-            border: "2px solid #22c55e",
-            boxShadow: "0 0 10px #22c55e55",
-          }}
-        >
-          🏆 Best Bargain
-          <h2>{best.name}</h2>
-          <p style={{ color: color(best.score) }}>
-            {best.score.toFixed(0)} — {best.role}
-          </p>
+        <div style={{ marginTop: 20, padding: 20, border: "1px solid #22c55e" }}>
+          <h2>🏆 Best Bargain</h2>
+          <p>{best.name} ({best.pos})</p>
+          <p>Score: {best.score} — {best.role}</p>
         </div>
       )}
 
-      {/* HIDDEN GEMS */}
-      <div style={{ marginTop: 20 }}>
-        💎 Hidden Gems
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {gems.map((p, i) => (
-            <span
-              key={i}
-              style={{
-                background: "#1e293b",
-                padding: "6px 10px",
-                borderRadius: 20,
-              }}
-            >
-              {p.name} ({p.score.toFixed(0)})
-            </span>
-          ))}
-        </div>
-      </div>
+      <h3 style={{ marginTop: 20 }}>💎 Hidden Gems</h3>
 
-      {/* EXPORT */}
-      {shortlist.length > 0 && (
-        <button
-          onClick={exportCSV}
-          style={{
-            marginTop: 10,
-            background: "#1e293b",
-            color: "white",
-            padding: "6px 12px",
-            borderRadius: 6,
-            border: "none",
-          }}
-        >
-          ⬇️ Export Shortlist
-        </button>
-      )}
-
-      {/* GRID */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fill,minmax(240px,1fr))",
-          gap: 15,
-          marginTop: 20,
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))",
+          gap: 12
         }}
       >
-        {filtered.map((p, i) => (
-          <div
-            key={i}
-            style={{
-              background: "#020617",
-              padding: 15,
-              borderRadius: 12,
-              border:
-                p === best
-                  ? "2px solid #22c55e"
-                  : "1px solid #1e293b",
-              boxShadow:
-                p === best ? "0 0 10px #22c55e55" : "none",
-            }}
-          >
-            <h3>
-              {p.name}
-              <span
-                style={{
-                  float: "right",
-                  color: color(p.score),
-                }}
-              >
-                {p.score.toFixed(0)}
-              </span>
-            </h3>
+        {hidden.map((p, i) => (
+          <div key={i} style={{ border: "1px solid #1e293b", padding: 12 }}>
+            <h4>{p.name}</h4>
+            <p>{p.pos} • Age {p.age}</p>
+            <p>Score: {p.score}</p>
+            <p>{p.role}</p>
 
-            <p>
-              {p.pos} • Age {display(p.age)}
-            </p>
-
-            {labels(p.pos).map((l, idx) => {
-              const val = [p.s1, p.s2, p.s3][idx];
-              return (
-                <div key={idx}>
-                  <small>{l}</small>
-                  <div
-                    style={{
-                      height: 6,
-                      background: "#334155",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${val}%`,
-                        height: 6,
-                        background: "#22c55e",
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-
-            <p style={{ fontSize: 12 }}>{p.role}</p>
-
-            <p style={{ fontSize: 12 }}>
-              💰 £{display(p.value)} | £{display(p.wage)}
-            </p>
-
-            <div style={{ display: "flex", gap: 5, marginTop: 10 }}>
-              <button onClick={() => toggleShort(p)}>⭐</button>
-              <button onClick={() => toggleCompare(p)}>⚖️</button>
-              <button
-                style={{
-                  background: "#22c55e",
-                  border: "none",
-                  padding: "5px 10px",
-                  borderRadius: 6,
-                }}
-              >
-                + Sign
-              </button>
-            </div>
+            <button
+              onClick={() =>
+                setShortlist(prev =>
+                  prev.find(s => s.name === p.name)
+                    ? prev
+                    : [...prev, p]
+                )
+              }
+              style={{ marginTop: 8 }}
+            >
+              ⭐ Save
+            </button>
           </div>
         ))}
       </div>
 
-      {/* COMPARE */}
-      {compare.length > 0 && (
-        <div style={{ marginTop: 30 }}>
-          <h2>⚖️ Compare</h2>
-          {compare.map((p, i) => (
-            <div key={i}>
-              {p.name} — {p.score.toFixed(0)}
-            </div>
+      {shortlist.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 20 }}>📌 Shortlist</h3>
+          {shortlist.map((p, i) => (
+            <p key={i}>{p.name} ({p.score})</p>
           ))}
-        </div>
+        </>
       )}
-    </main>
+    </div>
   );
 }

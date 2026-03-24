@@ -21,17 +21,11 @@ export default function Home() {
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 UNIVERSAL CSV PARSER
+  // CSV PARSER
   const parseCSV = (text: string): Player[] => {
     const lines = text.split("\n").filter(l => l.trim() !== "");
 
-    const detectDelimiter = (row: string) => {
-      const comma = (row.match(/,/g) || []).length;
-      const semi = (row.match(/;/g) || []).length;
-      return semi > comma ? ";" : ",";
-    };
-
-    const delimiter = detectDelimiter(lines[0]);
+    const delimiter = lines[0].includes(";") ? ";" : ",";
     const split = (row: string) => row.split(delimiter).map(c => c.trim());
     const headers = split(lines[0]).map(h => h.toLowerCase());
 
@@ -46,13 +40,12 @@ export default function Home() {
       club: findCol(["club"]),
       value: findCol(["value"]),
       wage: findCol(["wage"]),
-
       stat1: findCol(["goals", "sv %", "saves", "tackles"]),
       stat2: findCol(["assists", "xg", "interceptions"]),
       stat3: findCol(["shots", "passes", "key passes"]),
     };
 
-    const data: Player[] = lines.slice(1).map(row => {
+    return lines.slice(1).map(row => {
       const c = split(row);
       const get = (i: number) => (i >= 0 ? c[i] : "");
 
@@ -64,22 +57,14 @@ export default function Home() {
         club: get(COL.club) || undefined,
         value: get(COL.value) || undefined,
         wage: get(COL.wage) || undefined,
-
         stat1: Number(get(COL.stat1)) || 0,
         stat2: Number(get(COL.stat2)) || 0,
         stat3: Number(get(COL.stat3)) || 0,
       };
-    });
-
-    return data.filter(
-      p =>
-        p.name &&
-        p.pos &&
-        !p.name.toLowerCase().includes("name")
-    );
+    }).filter(p => p.name && p.pos);
   };
 
-  // 🔥 POSITION-BASED SCORING
+  // SCORING
   const scorePlayer = (p: Player): Player => {
     let score = 0;
     let role = "Squad Player";
@@ -103,17 +88,9 @@ export default function Home() {
 
   const handleFile = async (file: File) => {
     setLoading(true);
-
     const text = await file.text();
-    let parsed = parseCSV(text);
 
-    const positions = [...new Set(parsed.map(p => p.pos))];
-    if (positions.length > 1) {
-      alert("⚠️ Upload ONE position at a time for best results");
-    }
-
-    parsed = parsed
-      .map(scorePlayer)
+    let parsed = parseCSV(text).map(scorePlayer)
       .sort((a, b) => (b.score || 0) - (a.score || 0));
 
     setPlayers(parsed);
@@ -124,45 +101,83 @@ export default function Home() {
   const hidden = players.slice(0, 8);
 
   return (
-    <div style={{ padding: 20, background: "#020617", minHeight: "100vh", color: "white" }}>
-      <h1>💎 FM Value Scout</h1>
+    <div style={{
+      padding: 30,
+      minHeight: "100vh",
+      background: "linear-gradient(180deg, #020617, #020617, #020617, #020617, #020617, #0f172a)",
+      color: "white",
+      fontFamily: "sans-serif"
+    }}>
 
-      <input
-        type="file"
-        onChange={(e) =>
-          e.target.files && handleFile(e.target.files[0])
-        }
-      />
+      <h1 style={{ fontSize: 32, marginBottom: 10 }}>
+        💎 FM Value Scout
+      </h1>
 
-      <p style={{ fontSize: 12, opacity: 0.7 }}>
-        ⚠️ Upload ONE position at a time (ST, CM, CB, GK)
-      </p>
+      <div style={{
+        border: "1px dashed #334155",
+        padding: 30,
+        borderRadius: 12,
+        textAlign: "center",
+        marginBottom: 20,
+        background: "#020617"
+      }}>
+        <input
+          type="file"
+          onChange={(e) =>
+            e.target.files && handleFile(e.target.files[0])
+          }
+        />
+        <p style={{ marginTop: 10, opacity: 0.6 }}>
+          Upload CSV (best results: one position at a time)
+        </p>
+      </div>
 
-      {loading && <p>Loading...</p>}
+      {loading && <p>⏳ Scouting players...</p>}
 
       {best && (
-        <div style={{ marginTop: 20, padding: 20, border: "1px solid #22c55e" }}>
+        <div style={{
+          padding: 20,
+          borderRadius: 12,
+          background: "linear-gradient(90deg, #022c22, #020617)",
+          border: "1px solid #22c55e",
+          marginBottom: 20
+        }}>
           <h2>🏆 Best Bargain</h2>
-          <p>{best.name} ({best.pos})</p>
-          <p>Score: {best.score} — {best.role}</p>
+          <h3>{best.name}</h3>
+          <p>{best.pos} • Age {best.age}</p>
+          <p style={{ color: "#22c55e" }}>
+            Score {best.score} — {best.role}
+          </p>
         </div>
       )}
 
-      <h3 style={{ marginTop: 20 }}>💎 Hidden Gems</h3>
+      <h2 style={{ marginBottom: 10 }}>💎 Hidden Gems</h2>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(220px,1fr))",
-          gap: 12
-        }}
-      >
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(260px,1fr))",
+        gap: 16
+      }}>
         {hidden.map((p, i) => (
-          <div key={i} style={{ border: "1px solid #1e293b", padding: 12 }}>
-            <h4>{p.name}</h4>
+          <div key={i} style={{
+            background: "#020617",
+            border: "1px solid #1e293b",
+            borderRadius: 12,
+            padding: 16,
+            transition: "0.2s"
+          }}>
+            <h3>{p.name}</h3>
             <p>{p.pos} • Age {p.age}</p>
-            <p>Score: {p.score}</p>
-            <p>{p.role}</p>
+
+            <p style={{ color: "#22c55e", fontWeight: "bold" }}>
+              {p.score}
+            </p>
+
+            <p style={{ opacity: 0.7 }}>{p.role}</p>
+
+            <p style={{ fontSize: 12, opacity: 0.6 }}>
+              {p.value || "-"} • {p.wage || "-"}
+            </p>
 
             <button
               onClick={() =>
@@ -172,7 +187,14 @@ export default function Home() {
                     : [...prev, p]
                 )
               }
-              style={{ marginTop: 8 }}
+              style={{
+                marginTop: 10,
+                background: "#22c55e",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: 6,
+                cursor: "pointer"
+              }}
             >
               ⭐ Save
             </button>
@@ -182,9 +204,11 @@ export default function Home() {
 
       {shortlist.length > 0 && (
         <>
-          <h3 style={{ marginTop: 20 }}>📌 Shortlist</h3>
+          <h2 style={{ marginTop: 30 }}>📌 Shortlist</h2>
           {shortlist.map((p, i) => (
-            <p key={i}>{p.name} ({p.score})</p>
+            <p key={i}>
+              {p.name} — {p.score}
+            </p>
           ))}
         </>
       )}

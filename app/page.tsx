@@ -21,11 +21,11 @@ export default function Home() {
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // CSV PARSER
+  // PARSER
   const parseCSV = (text: string): Player[] => {
     const lines = text.split("\n").filter(l => l.trim() !== "");
-
     const delimiter = lines[0].includes(";") ? ";" : ",";
+
     const split = (row: string) => row.split(delimiter).map(c => c.trim());
     const headers = split(lines[0]).map(h => h.toLowerCase());
 
@@ -90,7 +90,8 @@ export default function Home() {
     setLoading(true);
     const text = await file.text();
 
-    let parsed = parseCSV(text).map(scorePlayer)
+    let parsed = parseCSV(text)
+      .map(scorePlayer)
       .sort((a, b) => (b.score || 0) - (a.score || 0));
 
     setPlayers(parsed);
@@ -104,7 +105,7 @@ export default function Home() {
     <div style={{
       padding: 30,
       minHeight: "100vh",
-      background: "linear-gradient(180deg, #020617, #020617, #020617, #020617, #020617, #0f172a)",
+      background: "linear-gradient(180deg, #020617, #020617, #0f172a)",
       color: "white",
       fontFamily: "sans-serif"
     }}>
@@ -113,13 +114,14 @@ export default function Home() {
         💎 FM Value Scout
       </h1>
 
+      {/* Upload */}
       <div style={{
         border: "1px dashed #334155",
-        padding: 30,
-        borderRadius: 12,
+        padding: 40,
+        borderRadius: 14,
         textAlign: "center",
-        marginBottom: 20,
-        background: "#020617"
+        marginBottom: 30,
+        background: "rgba(15,23,42,0.6)"
       }}>
         <input
           type="file"
@@ -134,42 +136,69 @@ export default function Home() {
 
       {loading && <p>⏳ Scouting players...</p>}
 
+      {/* Best Bargain */}
       {best && (
         <div style={{
-          padding: 20,
-          borderRadius: 12,
+          padding: 24,
+          borderRadius: 16,
           background: "linear-gradient(90deg, #022c22, #020617)",
           border: "1px solid #22c55e",
+          boxShadow: "0 0 30px rgba(34,197,94,0.2)",
           marginBottom: 20
         }}>
           <h2>🏆 Best Bargain</h2>
-          <h3>{best.name}</h3>
+          <h1 style={{ fontSize: 28 }}>{best.name}</h1>
           <p>{best.pos} • Age {best.age}</p>
-          <p style={{ color: "#22c55e" }}>
-            Score {best.score} — {best.role}
+
+          <p style={{
+            fontSize: 22,
+            color: "#22c55e",
+            fontWeight: "bold"
+          }}>
+            {best.score} — {best.role}
           </p>
         </div>
       )}
 
+      <hr style={{
+        margin: "30px 0",
+        border: "1px solid #1e293b"
+      }} />
+
       <h2 style={{ marginBottom: 10 }}>💎 Hidden Gems</h2>
 
+      {/* Cards */}
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(260px,1fr))",
         gap: 16
       }}>
         {hidden.map((p, i) => (
-          <div key={i} style={{
-            background: "#020617",
-            border: "1px solid #1e293b",
-            borderRadius: 12,
-            padding: 16,
-            transition: "0.2s"
-          }}>
+          <div
+            key={i}
+            style={{
+              background: "linear-gradient(180deg, #020617, #020617)",
+              border: "1px solid rgba(34,197,94,0.2)",
+              borderRadius: 14,
+              padding: 16,
+              boxShadow: "0 0 20px rgba(34,197,94,0.08)",
+              transition: "0.2s"
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.transform = "scale(1.03)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.transform = "scale(1)")
+            }
+          >
             <h3>{p.name}</h3>
             <p>{p.pos} • Age {p.age}</p>
 
-            <p style={{ color: "#22c55e", fontWeight: "bold" }}>
+            <p style={{
+              fontSize: 20,
+              fontWeight: "bold",
+              color: "#22c55e"
+            }}>
               {p.score}
             </p>
 
@@ -202,6 +231,7 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Shortlist */}
       {shortlist.length > 0 && (
         <>
           <h2 style={{ marginTop: 30 }}>📌 Shortlist</h2>

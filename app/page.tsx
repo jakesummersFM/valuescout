@@ -6,85 +6,58 @@ type Player = {
   age: number;
   pos: string;
   value: string;
-  stat1: number;
-  stat2: number;
-  stat3: number;
+  goals: number;
+  xg: number;
+  shots: number;
   score?: number;
-  role?: string;
 };
 
 export default function Home() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
-  const [compare, setCompare] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dataQuality, setDataQuality] = useState<any>(null);
 
-  // --- CSV PARSER ---
+  // --- SAFE CSV PARSER ---
   const parseCSV = (text: string): Player[] => {
     const rows = text.split("\n").map(r => r.split(","));
-    const headers = rows[0].map(h => h.toLowerCase());
+    const headers = rows[0].map(h => h.trim().toLowerCase());
+
+    const get = (row: string[], key: string) => {
+      const i = headers.findIndex(h => h.includes(key));
+      return i !== -1 ? row[i] : "";
+    };
 
     return rows.slice(1).map(r => ({
-      name: r[headers.indexOf("name")] || "",
-      age: Number(r[headers.indexOf("age")]) || 0,
-      pos: r[headers.indexOf("position")] || "",
-      value: r[headers.indexOf("value")] || "",
-      stat1: Number(r[headers.findIndex(h => h.includes("goal") || h.includes("assist") || h.includes("tackle"))]) || 0,
-      stat2: Number(r[headers.findIndex(h => h.includes("xg") || h.includes("key") || h.includes("interception"))]) || 0,
-      stat3: Number(r[headers.findIndex(h => h.includes("shot") || h.includes("%") || h.includes("clearance"))]) || 0,
+      name: get(r, "name") || "Unknown",
+      age: Number(get(r, "age")) || 0,
+      pos: get(r, "position") || "",
+      value: get(r, "value") || "0",
+      goals: Number(get(r, "goal")) || 0,
+      xg: Number(get(r, "xg")) || 0,
+      shots: Number(get(r, "shot")) || 0,
     }));
   };
 
   // --- SCORING ---
   const scorePlayer = (p: Player): Player => {
-    let score = 0;
-    let role = "Squad Player";
+    const value = parseInt((p.value || "0").replace(/[^0-9]/g, "")) || 1000000;
 
-    const value = parseInt(p.value.replace(/[^0-9]/g, "")) || 1000000;
+    const efficiency = p.xg > 0 ? p.goals / p.xg : 0;
 
-    const s1 = p.stat1 || 0;
-    const s2 = p.stat2 || 0;
-    const s3 = p.stat3 || 0;
+    let score =
+      p.goals * 0.6 +
+      p.xg * 0.2 +
+      p.shots * 0.1 +
+      efficiency * 10;
 
-    if (p.pos.includes("ST")) {
-      const eff = s2 > 0 ? s1 / s2 : 0;
-      score = s1 * 0.5 + s2 * 0.2 + s3 * 0.1 + eff * 10;
-      role = eff > 1.2 ? "Clinical Finisher" : "Elite Finisher";
-    } else if (p.pos.includes("CM") || p.pos.includes("AM")) {
-      score = s1 * 0.3 + s2 * 0.5 + s3 * 0.2;
-      role = "Playmaker";
-    } else if (p.pos.includes("CB")) {
-      score = s1 * 0.5 + s2 * 0.4 + s3 * 0.1;
-      role = "Ball Winner";
-    } else if (p.pos.includes("GK")) {
-      score = s1 * 0.6 + s2 * 0.2 + s3 * 0.2;
-      role = "Shot Stopper";
-    }
+    score = score - p.age * 0.3 - value / 200000;
 
-    score = score - p.age * 0.4 - value / 200000;
     if (p.age < 23) score += 5;
 
-    return { ...p, score: Math.round(score), role };
+    return { ...p, score: Math.round(score) };
   };
 
-  // --- DATA QUALITY ---
-  const checkQuality = (players: Player[]) => {
-    let missing = 0;
-    players.forEach(p => {
-      if (!p.stat1) missing++;
-      if (!p.stat2) missing++;
-      if (!p.stat3) missing++;
-    });
-
-    const ratio = 1 - missing / (players.length * 3);
-
-    if (ratio > 0.8) return { text: "High Quality", color: "text-green-400" };
-    if (ratio > 0.5) return { text: "Medium Quality", color: "text-yellow-400" };
-    return { text: "Low Quality", color: "text-red-400" };
-  };
-
-  // --- UPLOAD ---
+  // --- FILE UPLOAD ---
   const handleFile = async (file: File) => {
     setLoading(true);
     const text = await file.text();
@@ -94,7 +67,6 @@ export default function Home() {
       .sort((a, b) => (b.score || 0) - (a.score || 0));
 
     setPlayers(parsed);
-    setDataQuality(checkQuality(parsed));
     setLoading(false);
   };
 
@@ -105,92 +77,104 @@ export default function Home() {
     }
   };
 
-  // --- COMPARE ---
-  const toggleCompare = (p: Player) => {
-    if (compare.find(c => c.name === p.name)) {
-      setCompare(compare.filter(c => c.name !== p.name));
-    } else if (compare.length < 2) {
-      setCompare([...compare, p]);
-    }
+  const removeFromShortlist = (p: Player) => {
+    setShortlist(shortlist.filter(s => s.name !== p.name));
   };
 
   return (
     <div className="bg-slate-950 text-white min-h-screen">
 
       {/* HERO */}
-      <div className="text-center py-16">
-        <h1 className="text-4xl font-bold">FM Value Scout</h1>
-        <p className="text-slate-400 mt-2">Find hidden gems instantly</p>
+      <section className="text-center px-6 py-16">
+        <h1 className="text-4xl font-bold mb-2">
+          FM Value Scout
+        </h1>
+
+        <p className="text-slate-400 mb-6">
+          Find hidden gems instantly
+        </p>
 
         <input
           type="file"
           accept=".csv"
-          onChange={(e) => e.target.files && handleFile(e.target.files[0])}
-          className="mt-6"
+          onChange={(e) =>
+            e.target.files && handleFile(e.target.files[0])
+          }
+          className="text-sm"
         />
 
-        {loading && <p className="text-emerald-400 mt-4">Analyzing players...</p>}
-      </div>
+        {loading && (
+          <p className="text-emerald-400 mt-4">
+            Analyzing players...
+          </p>
+        )}
+      </section>
 
-      {/* DATA QUALITY */}
-      {dataQuality && (
-        <p className={`text-center mb-6 ${dataQuality.color}`}>
-          {dataQuality.text}
-        </p>
-      )}
+      {/* PLAYER GRID */}
+      <section className="max-w-6xl mx-auto px-6 pb-12">
 
-      {/* TABLE */}
-      <div className="max-w-5xl mx-auto px-6">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-700">
-              <th>Name</th><th>Age</th><th>Pos</th><th>Score</th><th>Actions</th>
-            </tr>
-          </thead>
+        <h2 className="mb-4 text-lg font-semibold">
+          🔍 Results
+        </h2>
 
-          <tbody>
-            {players.map((p, i) => (
-              <tr key={i} className="border-b border-slate-800 text-center">
-                <td>{p.name}</td>
-                <td>{p.age}</td>
-                <td>{p.pos}</td>
-                <td className="text-emerald-400">{p.score}</td>
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {players.map((p, i) => (
+            <div
+              key={i}
+              className="bg-slate-900 border border-slate-800 rounded-xl p-4"
+            >
+              <h3 className="font-semibold">{p.name}</h3>
+              <p className="text-sm text-slate-400">
+                {p.pos} • Age {p.age}
+              </p>
 
-                <td className="space-x-2">
-                  <button onClick={() => addToShortlist(p)}>⭐</button>
-                  <button onClick={() => toggleCompare(p)}>⚖️</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              <p className="text-emerald-400 mt-2 text-lg">
+                {p.score}
+              </p>
+
+              <button
+                onClick={() => addToShortlist(p)}
+                className="mt-3 bg-emerald-500 hover:bg-emerald-400 text-black px-3 py-1 rounded text-sm"
+              >
+                ⭐ Save
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* SHORTLIST */}
       {shortlist.length > 0 && (
-        <div className="max-w-5xl mx-auto px-6 mt-10">
-          <h2 className="mb-2">⭐ Shortlist</h2>
-          {shortlist.map((p, i) => (
-            <p key={i}>{p.name} ({p.score})</p>
-          ))}
-        </div>
-      )}
+        <section className="max-w-6xl mx-auto px-6 pb-20">
+          <h2 className="mb-4 text-lg font-semibold">
+            ⭐ Shortlist
+          </h2>
 
-      {/* COMPARE */}
-      {compare.length === 2 && (
-        <div className="max-w-5xl mx-auto px-6 mt-10">
-          <h2 className="mb-2">⚖️ Compare</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {compare.map((p, i) => (
-              <div key={i} className="bg-slate-900 p-4 rounded">
-                <h3>{p.name}</h3>
-                <p>Score: {p.score}</p>
-                <p>Age: {p.age}</p>
-                <p>Pos: {p.pos}</p>
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+            {shortlist.map((p, i) => (
+              <div
+                key={i}
+                className="bg-slate-800 border border-slate-700 rounded-xl p-4"
+              >
+                <h3 className="font-semibold">{p.name}</h3>
+                <p className="text-sm text-slate-400">
+                  {p.pos} • Age {p.age}
+                </p>
+
+                <p className="text-emerald-400 mt-2">
+                  {p.score}
+                </p>
+
+                <button
+                  onClick={() => removeFromShortlist(p)}
+                  className="mt-3 bg-red-500 hover:bg-red-400 text-black px-3 py-1 rounded text-sm"
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
     </div>

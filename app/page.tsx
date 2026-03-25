@@ -1,180 +1,186 @@
 "use client";
 import { useState } from "react";
 
-type Player = {
-  name: string;
-  age: number;
-  pos: string;
-  value: string;
-  goals: number;
-  xg: number;
-  shots: number;
-  score?: number;
-};
-
 export default function Home() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [shortlist, setShortlist] = useState<any[]>([]);
+  const [best, setBest] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // --- SAFE CSV PARSER ---
-  const parseCSV = (text: string): Player[] => {
+  // --- CSV PARSER ---
+  const parseCSV = (text: string) => {
     const rows = text.split("\n").map(r => r.split(","));
-    const headers = rows[0].map(h => h.trim().toLowerCase());
+    const headers = rows[0].map(h => h.toLowerCase());
 
-    const get = (row: string[], key: string) => {
-      const i = headers.findIndex(h => h.includes(key));
-      return i !== -1 ? row[i] : "";
-    };
+    const getIndex = (key: string) =>
+      headers.findIndex(h => h.includes(key));
 
-    return rows.slice(1).map(r => ({
-      name: get(r, "name") || "Unknown",
-      age: Number(get(r, "age")) || 0,
-      pos: get(r, "position") || "",
-      value: get(r, "value") || "0",
-      goals: Number(get(r, "goal")) || 0,
-      xg: Number(get(r, "xg")) || 0,
-      shots: Number(get(r, "shot")) || 0,
-    }));
+    return { rows: rows.slice(1), headers, getIndex };
+  };
+
+  // --- DETECT MODEL ---
+  const detectModel = (headers: string[]) => {
+    if (headers.some(h => h.includes("save"))) return "gk";
+    if (headers.some(h => h.includes("goal"))) return "att";
+    if (headers.some(h => h.includes("key pass") || h.includes("progress"))) return "mid";
+    if (headers.some(h => h.includes("tackle") || h.includes("interception"))) return "def";
+    return "generic";
+  };
+
+  // --- ROLE LABELS ---
+  const getRole = (model: string, score: number) => {
+    if (model === "att") return score > 25 ? "Elite Finisher" : "Attacker";
+    if (model === "mid") return score > 20 ? "Playmaker" : "Midfielder";
+    if (model === "def") return score > 20 ? "Ball Winner" : "Defender";
+    if (model === "gk") return score > 20 ? "Shot Stopper" : "Goalkeeper";
+    return "Player";
   };
 
   // --- SCORING ---
-  const scorePlayer = (p: Player): Player => {
-    const value = parseInt((p.value || "0").replace(/[^0-9]/g, "")) || 1000000;
+  const scorePlayer = (row: string[], model: string, get: any) => {
+    const age = Number(get("age")) || 0;
+    const value = parseInt((get("value") || "0").replace(/[^0-9]/g, "")) || 1000000;
 
-    const efficiency = p.xg > 0 ? p.goals / p.xg : 0;
+    let s = 0;
 
-    let score =
-      p.goals * 0.6 +
-      p.xg * 0.2 +
-      p.shots * 0.1 +
-      efficiency * 10;
+    if (model === "gk") {
+      s = Number(get("save")) * 0.6 + Number(get("saves")) * 0.4;
+    }
 
-    score = score - p.age * 0.3 - value / 200000;
+    if (model === "att") {
+      const g = Number(get("goal"));
+      const xg = Number(get("xg"));
+      const sh = Number(get("shot"));
+      const eff = xg > 0 ? g / xg : 0;
+      s = g * 0.6 + xg * 0.2 + sh * 0.1 + eff * 10;
+    }
 
-    if (p.age < 23) score += 5;
+    if (model === "mid") {
+      s =
+        Number(get("key")) * 0.4 +
+        Number(get("progress")) * 0.3 +
+        Number(get("%")) * 0.3;
+    }
 
-    return { ...p, score: Math.round(score) };
+    if (model === "def") {
+      s =
+        Number(get("tackle")) * 0.3 +
+        Number(get("interception")) * 0.25 +
+        Number(get("clear")) * 0.25 +
+        Number(get("aerial")) * 0.2;
+    }
+
+    s = s - age * 0.3 - value / 200000;
+    if (age < 23) s += 5;
+
+    return Math.round(s);
   };
 
-  // --- FILE UPLOAD ---
+  // --- FILE HANDLER ---
   const handleFile = async (file: File) => {
     setLoading(true);
     const text = await file.text();
 
-    const parsed = parseCSV(text)
-      .map(scorePlayer)
-      .sort((a, b) => (b.score || 0) - (a.score || 0));
+    const { rows, headers, getIndex } = parseCSV(text);
+    const model = detectModel(headers);
 
-    setPlayers(parsed);
+    const data = rows.map(r => {
+      const get = (k: string) => {
+        const i = getIndex(k);
+        return i !== -1 ? r[i] : "";
+      };
+
+      const score = scorePlayer(r, model, get);
+
+      return {
+        name: get("name") || "Unknown",
+        age: Number(get("age")) || 0,
+        pos: get("position") || "",
+        value: get("value") || "",
+        score,
+        role: getRole(model, score),
+      };
+    }).sort((a, b) => b.score - a.score);
+
+    setPlayers(data);
+    setBest(data[0]);
     setLoading(false);
   };
 
-  // --- SHORTLIST ---
-  const addToShortlist = (p: Player) => {
+  const add = (p: any) => {
     if (!shortlist.find(s => s.name === p.name)) {
       setShortlist([...shortlist, p]);
     }
   };
 
-  const removeFromShortlist = (p: Player) => {
-    setShortlist(shortlist.filter(s => s.name !== p.name));
-  };
-
   return (
-    <div className="bg-slate-950 text-white min-h-screen">
+    <div className="bg-[#020617] text-white min-h-screen p-6">
 
-      {/* HERO */}
-      <section className="text-center px-6 py-16">
-        <h1 className="text-4xl font-bold mb-2">
-          FM Value Scout
-        </h1>
+      {/* HEADER */}
+      <h1 className="text-3xl font-bold mb-4">💎 FM Value Scout</h1>
 
-        <p className="text-slate-400 mb-6">
-          Find hidden gems instantly
+      {/* UPLOAD */}
+      <div className="border border-slate-800 rounded-xl p-6 mb-6 text-center">
+        <input type="file" onChange={(e)=>e.target.files && handleFile(e.target.files[0])} />
+        <p className="text-sm text-slate-400 mt-2">
+          Upload CSV (best results: one position at a time)
         </p>
+        {loading && <p className="text-green-400 mt-2">Analyzing...</p>}
+      </div>
 
-        <input
-          type="file"
-          accept=".csv"
-          onChange={(e) =>
-            e.target.files && handleFile(e.target.files[0])
-          }
-          className="text-sm"
-        />
-
-        {loading && (
-          <p className="text-emerald-400 mt-4">
-            Analyzing players...
+      {/* BEST BARGAIN */}
+      {best && (
+        <div className="mb-6 p-6 rounded-xl border border-green-500 bg-gradient-to-r from-green-900/40 to-transparent">
+          <p className="text-green-400 text-sm">🏆 Best Bargain</p>
+          <h2 className="text-2xl">{best.name}</h2>
+          <p className="text-slate-300">{best.pos} • Age {best.age}</p>
+          <p className="text-green-400 text-xl">
+            {best.score} — {best.role}
           </p>
-        )}
-      </section>
-
-      {/* PLAYER GRID */}
-      <section className="max-w-6xl mx-auto px-6 pb-12">
-
-        <h2 className="mb-4 text-lg font-semibold">
-          🔍 Results
-        </h2>
-
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {players.map((p, i) => (
-            <div
-              key={i}
-              className="bg-slate-900 border border-slate-800 rounded-xl p-4"
-            >
-              <h3 className="font-semibold">{p.name}</h3>
-              <p className="text-sm text-slate-400">
-                {p.pos} • Age {p.age}
-              </p>
-
-              <p className="text-emerald-400 mt-2 text-lg">
-                {p.score}
-              </p>
-
-              <button
-                onClick={() => addToShortlist(p)}
-                className="mt-3 bg-emerald-500 hover:bg-emerald-400 text-black px-3 py-1 rounded text-sm"
-              >
-                ⭐ Save
-              </button>
-            </div>
-          ))}
         </div>
-      </section>
+      )}
+
+      {/* HIDDEN GEMS */}
+      <h2 className="mb-4">💎 Hidden Gems</h2>
+
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+        {players.slice(0, 12).map((p, i) => (
+          <div key={i} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+            <h3>{p.name}</h3>
+            <p className="text-sm text-slate-400">{p.pos} • Age {p.age}</p>
+
+            <p className="text-green-400 mt-2">
+              {p.score}
+            </p>
+
+            <p className="text-xs text-slate-400">{p.role}</p>
+
+            <button
+              onClick={() => add(p)}
+              className="mt-3 bg-green-500 hover:bg-green-400 px-3 py-1 rounded text-black text-sm"
+            >
+              ⭐ Save
+            </button>
+          </div>
+        ))}
+      </div>
 
       {/* SHORTLIST */}
       {shortlist.length > 0 && (
-        <section className="max-w-6xl mx-auto px-6 pb-20">
-          <h2 className="mb-4 text-lg font-semibold">
-            ⭐ Shortlist
-          </h2>
+        <>
+          <h2 className="mt-10 mb-4">⭐ Shortlist</h2>
 
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
             {shortlist.map((p, i) => (
-              <div
-                key={i}
-                className="bg-slate-800 border border-slate-700 rounded-xl p-4"
-              >
-                <h3 className="font-semibold">{p.name}</h3>
-                <p className="text-sm text-slate-400">
-                  {p.pos} • Age {p.age}
-                </p>
-
-                <p className="text-emerald-400 mt-2">
-                  {p.score}
-                </p>
-
-                <button
-                  onClick={() => removeFromShortlist(p)}
-                  className="mt-3 bg-red-500 hover:bg-red-400 text-black px-3 py-1 rounded text-sm"
-                >
-                  Remove
-                </button>
+              <div key={i} className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                <h3>{p.name}</h3>
+                <p className="text-sm text-slate-400">{p.pos} • Age {p.age}</p>
+                <p className="text-green-400">{p.score}</p>
+                <p className="text-xs text-slate-400">{p.role}</p>
               </div>
             ))}
           </div>
-        </section>
+        </>
       )}
 
     </div>

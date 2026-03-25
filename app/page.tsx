@@ -5,10 +5,7 @@ type Player = {
   name: string;
   age: number;
   pos: string;
-  nation?: string;
-  club?: string;
-  value?: string;
-  wage?: string;
+  value: string;
   stat1: number;
   stat2: number;
   stat3: number;
@@ -19,229 +16,183 @@ type Player = {
 export default function Home() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [compare, setCompare] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dataQuality, setDataQuality] = useState<any>(null);
 
-  // PARSER
+  // --- CSV PARSER ---
   const parseCSV = (text: string): Player[] => {
-    const lines = text.split("\n").filter(l => l.trim() !== "");
-    const delimiter = lines[0].includes(";") ? ";" : ",";
+    const rows = text.split("\n").map(r => r.split(","));
+    const headers = rows[0].map(h => h.toLowerCase());
 
-    const split = (row: string) => row.split(delimiter).map(c => c.trim());
-    const headers = split(lines[0]).map(h => h.toLowerCase());
-
-    const findCol = (names: string[]) =>
-      headers.findIndex(h => names.some(n => h.includes(n)));
-
-    const COL = {
-      name: findCol(["name", "player"]),
-      age: findCol(["age"]),
-      pos: findCol(["position"]),
-      nation: findCol(["nation"]),
-      club: findCol(["club"]),
-      value: findCol(["value"]),
-      wage: findCol(["wage"]),
-      stat1: findCol(["goals", "sv %", "saves", "tackles"]),
-      stat2: findCol(["assists", "xg", "interceptions"]),
-      stat3: findCol(["shots", "passes", "key passes"]),
-    };
-
-    return lines.slice(1).map(row => {
-      const c = split(row);
-      const get = (i: number) => (i >= 0 ? c[i] : "");
-
-      return {
-        name: get(COL.name),
-        age: Number(get(COL.age)) || 0,
-        pos: get(COL.pos),
-        nation: get(COL.nation) || undefined,
-        club: get(COL.club) || undefined,
-        value: get(COL.value) || undefined,
-        wage: get(COL.wage) || undefined,
-        stat1: Number(get(COL.stat1)) || 0,
-        stat2: Number(get(COL.stat2)) || 0,
-        stat3: Number(get(COL.stat3)) || 0,
-      };
-    }).filter(p => p.name && p.pos);
+    return rows.slice(1).map(r => ({
+      name: r[headers.indexOf("name")] || "",
+      age: Number(r[headers.indexOf("age")]) || 0,
+      pos: r[headers.indexOf("position")] || "",
+      value: r[headers.indexOf("value")] || "",
+      stat1: Number(r[headers.findIndex(h => h.includes("goal") || h.includes("assist") || h.includes("tackle"))]) || 0,
+      stat2: Number(r[headers.findIndex(h => h.includes("xg") || h.includes("key") || h.includes("interception"))]) || 0,
+      stat3: Number(r[headers.findIndex(h => h.includes("shot") || h.includes("%") || h.includes("clearance"))]) || 0,
+    }));
   };
 
-  // SCORING
+  // --- SCORING ---
   const scorePlayer = (p: Player): Player => {
     let score = 0;
     let role = "Squad Player";
 
-    if (p.pos.includes("GK")) {
-      score = p.stat1 * 0.6 + p.stat2 * -0.2 + p.stat3 * 0.2;
-      role = "Shot Stopper";
-    } else if (p.pos.includes("ST")) {
-      score = p.stat1 * 0.6 + p.stat2 * 0.3 + p.stat3 * 0.1;
-      role = "Elite Finisher";
-    } else if (p.pos.includes("CM")) {
-      score = p.stat1 * 0.3 + p.stat2 * 0.5 + p.stat3 * 0.2;
+    const value = parseInt(p.value.replace(/[^0-9]/g, "")) || 1000000;
+
+    const s1 = p.stat1 || 0;
+    const s2 = p.stat2 || 0;
+    const s3 = p.stat3 || 0;
+
+    if (p.pos.includes("ST")) {
+      const eff = s2 > 0 ? s1 / s2 : 0;
+      score = s1 * 0.5 + s2 * 0.2 + s3 * 0.1 + eff * 10;
+      role = eff > 1.2 ? "Clinical Finisher" : "Elite Finisher";
+    } else if (p.pos.includes("CM") || p.pos.includes("AM")) {
+      score = s1 * 0.3 + s2 * 0.5 + s3 * 0.2;
       role = "Playmaker";
     } else if (p.pos.includes("CB")) {
-      score = p.stat1 * 0.5 + p.stat2 * 0.4 + p.stat3 * 0.1;
+      score = s1 * 0.5 + s2 * 0.4 + s3 * 0.1;
       role = "Ball Winner";
+    } else if (p.pos.includes("GK")) {
+      score = s1 * 0.6 + s2 * 0.2 + s3 * 0.2;
+      role = "Shot Stopper";
     }
+
+    score = score - p.age * 0.4 - value / 200000;
+    if (p.age < 23) score += 5;
 
     return { ...p, score: Math.round(score), role };
   };
 
+  // --- DATA QUALITY ---
+  const checkQuality = (players: Player[]) => {
+    let missing = 0;
+    players.forEach(p => {
+      if (!p.stat1) missing++;
+      if (!p.stat2) missing++;
+      if (!p.stat3) missing++;
+    });
+
+    const ratio = 1 - missing / (players.length * 3);
+
+    if (ratio > 0.8) return { text: "High Quality", color: "text-green-400" };
+    if (ratio > 0.5) return { text: "Medium Quality", color: "text-yellow-400" };
+    return { text: "Low Quality", color: "text-red-400" };
+  };
+
+  // --- UPLOAD ---
   const handleFile = async (file: File) => {
     setLoading(true);
     const text = await file.text();
 
-    let parsed = parseCSV(text)
+    const parsed = parseCSV(text)
       .map(scorePlayer)
       .sort((a, b) => (b.score || 0) - (a.score || 0));
 
     setPlayers(parsed);
+    setDataQuality(checkQuality(parsed));
     setLoading(false);
   };
 
-  const best = players[0];
-  const hidden = players.slice(0, 8);
+  // --- SHORTLIST ---
+  const addToShortlist = (p: Player) => {
+    if (!shortlist.find(s => s.name === p.name)) {
+      setShortlist([...shortlist, p]);
+    }
+  };
+
+  // --- COMPARE ---
+  const toggleCompare = (p: Player) => {
+    if (compare.find(c => c.name === p.name)) {
+      setCompare(compare.filter(c => c.name !== p.name));
+    } else if (compare.length < 2) {
+      setCompare([...compare, p]);
+    }
+  };
 
   return (
-    <div style={{
-      padding: 30,
-      minHeight: "100vh",
-      background: "linear-gradient(180deg, #020617, #020617, #0f172a)",
-      color: "white",
-      fontFamily: "sans-serif"
-    }}>
+    <div className="bg-slate-950 text-white min-h-screen">
 
-      <h1 style={{ fontSize: 32, marginBottom: 10 }}>
-        💎 FM Value Scout
-      </h1>
+      {/* HERO */}
+      <div className="text-center py-16">
+        <h1 className="text-4xl font-bold">FM Value Scout</h1>
+        <p className="text-slate-400 mt-2">Find hidden gems instantly</p>
 
-      {/* Upload */}
-      <div style={{
-        border: "1px dashed #334155",
-        padding: 40,
-        borderRadius: 14,
-        textAlign: "center",
-        marginBottom: 30,
-        background: "rgba(15,23,42,0.6)"
-      }}>
         <input
           type="file"
-          onChange={(e) =>
-            e.target.files && handleFile(e.target.files[0])
-          }
+          accept=".csv"
+          onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+          className="mt-6"
         />
-        <p style={{ marginTop: 10, opacity: 0.6 }}>
-          Upload CSV (best results: one position at a time)
-        </p>
+
+        {loading && <p className="text-emerald-400 mt-4">Analyzing players...</p>}
       </div>
 
-      {loading && <p>⏳ Scouting players...</p>}
+      {/* DATA QUALITY */}
+      {dataQuality && (
+        <p className={`text-center mb-6 ${dataQuality.color}`}>
+          {dataQuality.text}
+        </p>
+      )}
 
-      {/* Best Bargain */}
-      {best && (
-        <div style={{
-          padding: 24,
-          borderRadius: 16,
-          background: "linear-gradient(90deg, #022c22, #020617)",
-          border: "1px solid #22c55e",
-          boxShadow: "0 0 30px rgba(34,197,94,0.2)",
-          marginBottom: 20
-        }}>
-          <h2>🏆 Best Bargain</h2>
-          <h1 style={{ fontSize: 28 }}>{best.name}</h1>
-          <p>{best.pos} • Age {best.age}</p>
+      {/* TABLE */}
+      <div className="max-w-5xl mx-auto px-6">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th>Name</th><th>Age</th><th>Pos</th><th>Score</th><th>Actions</th>
+            </tr>
+          </thead>
 
-          <p style={{
-            fontSize: 22,
-            color: "#22c55e",
-            fontWeight: "bold"
-          }}>
-            {best.score} — {best.role}
-          </p>
+          <tbody>
+            {players.map((p, i) => (
+              <tr key={i} className="border-b border-slate-800 text-center">
+                <td>{p.name}</td>
+                <td>{p.age}</td>
+                <td>{p.pos}</td>
+                <td className="text-emerald-400">{p.score}</td>
+
+                <td className="space-x-2">
+                  <button onClick={() => addToShortlist(p)}>⭐</button>
+                  <button onClick={() => toggleCompare(p)}>⚖️</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* SHORTLIST */}
+      {shortlist.length > 0 && (
+        <div className="max-w-5xl mx-auto px-6 mt-10">
+          <h2 className="mb-2">⭐ Shortlist</h2>
+          {shortlist.map((p, i) => (
+            <p key={i}>{p.name} ({p.score})</p>
+          ))}
         </div>
       )}
 
-      <hr style={{
-        margin: "30px 0",
-        border: "1px solid #1e293b"
-      }} />
-
-      <h2 style={{ marginBottom: 10 }}>💎 Hidden Gems</h2>
-
-      {/* Cards */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(260px,1fr))",
-        gap: 16
-      }}>
-        {hidden.map((p, i) => (
-          <div
-            key={i}
-            style={{
-              background: "linear-gradient(180deg, #020617, #020617)",
-              border: "1px solid rgba(34,197,94,0.2)",
-              borderRadius: 14,
-              padding: 16,
-              boxShadow: "0 0 20px rgba(34,197,94,0.08)",
-              transition: "0.2s"
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.transform = "scale(1.03)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.transform = "scale(1)")
-            }
-          >
-            <h3>{p.name}</h3>
-            <p>{p.pos} • Age {p.age}</p>
-
-            <p style={{
-              fontSize: 20,
-              fontWeight: "bold",
-              color: "#22c55e"
-            }}>
-              {p.score}
-            </p>
-
-            <p style={{ opacity: 0.7 }}>{p.role}</p>
-
-            <p style={{ fontSize: 12, opacity: 0.6 }}>
-              {p.value || "-"} • {p.wage || "-"}
-            </p>
-
-            <button
-              onClick={() =>
-                setShortlist(prev =>
-                  prev.find(s => s.name === p.name)
-                    ? prev
-                    : [...prev, p]
-                )
-              }
-              style={{
-                marginTop: 10,
-                background: "#22c55e",
-                border: "none",
-                padding: "6px 12px",
-                borderRadius: 6,
-                cursor: "pointer"
-              }}
-            >
-              ⭐ Save
-            </button>
+      {/* COMPARE */}
+      {compare.length === 2 && (
+        <div className="max-w-5xl mx-auto px-6 mt-10">
+          <h2 className="mb-2">⚖️ Compare</h2>
+          <div className="grid grid-cols-2 gap-4">
+            {compare.map((p, i) => (
+              <div key={i} className="bg-slate-900 p-4 rounded">
+                <h3>{p.name}</h3>
+                <p>Score: {p.score}</p>
+                <p>Age: {p.age}</p>
+                <p>Pos: {p.pos}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* Shortlist */}
-      {shortlist.length > 0 && (
-        <>
-          <h2 style={{ marginTop: 30 }}>📌 Shortlist</h2>
-          {shortlist.map((p, i) => (
-            <p key={i}>
-              {p.name} — {p.score}
-            </p>
-          ))}
-        </>
+        </div>
       )}
+
     </div>
   );
 }

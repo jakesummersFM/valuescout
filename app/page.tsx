@@ -1,201 +1,128 @@
 "use client"
 import React, { useState } from "react"
 import Papa from "papaparse"
-// ---------------- SAFE ----------------
+type Player = {
+  name: string
+  age: number
+  position: string
+  score: number
+  value: number
+  best?: boolean
+}
+// SAFE NUMBER
 const safe = (val: any): number => {
   const num = Number(val)
   return isNaN(num) ? 0 : num
 }
-// ---------------- CLEAN ----------------
+// CLEAN DATA
 const cleanData = (data: any[]): any[] => {
-  return data.filter(row => row["Name"] && row["Name"] !== "")
+  return data.filter((row) => row["Name"] && row["Name"] !== "")
 }
-// ---------------- POSITION ----------------
+// DETECT POSITION
 const detectPosition = (row: any): string => {
   const pos = row["Position"] || ""
   if (pos.includes("GK")) return "GK"
   if (pos.match(/CB|LB|RB/)) return "DEF"
   if (pos.match(/CM|AM|DM/)) return "MID"
   if (pos.match(/ST|CF/)) return "ATT"
-  return "UNKNOWN"
+  return "UNK"
 }
-// ---------------- SCORING ----------------
-const calculateScore = (row: any, type: string): number => {
-  const age = safe(row["Age"])
-  const value = safe(row["Value"])
-  let performance = 0
-  if (type === "ATT") {
-    performance =
-      safe(row["Goals"]) * 4 +
-      safe(row["xG"]) * 3 +
-      safe(row["Shots"]) * 0.5 +
-      safe(row["Shots on Target"]) * 1
-  }
-  if (type === "MID") {
-    performance =
-      safe(row["Assists"]) * 4 +
-      safe(row["Key Passes"]) * 2 +
-      safe(row["Progressive Passes"]) * 1.5 +
-      safe(row["Pass Completion %"]) * 0.3
-  }
-  if (type === "DEF") {
-    performance =
-      safe(row["Tackles"]) * 2 +
-      safe(row["Interceptions"]) * 2 +
-      safe(row["Clearances"]) * 1.5 +
-      safe(row["Aerial Duels Won"]) * 1.5
-  }
-  if (type === "GK") {
-    performance =
-      safe(row["Save %"]) * 2 +
-      safe(row["Saves"]) * 1.5 +
-      safe(row["Clean Sheets"]) * 3
-  }
-  const ageFactor = age <= 24 ? 1.1 : age <= 28 ? 1 : 0.9
-  const valueFactor = value > 0 ? 1 / Math.log(value + 10) : 1
-  return performance * ageFactor * valueFactor
-}
-// ---------------- PROCESS ----------------
-const processPlayers = (data: any[]) => {
-  const cleaned = cleanData(data)
-  const players = cleaned.map((row: any) => {
-    const type = detectPosition(row)
-    const rawScore = calculateScore(row, type)
-    const value = safe(row["Value"])
-    return {
-      name: row["Name"] || "Unknown",
-      age: safe(row["Age"]),
-      position: row["Position"] || "N/A",
-      type,
-      rawScore,
-      value,
-      stats: row
-    }
-  })
-  const maxScore = players.length
-    ? Math.max(...players.map(p => p.rawScore))
-    : 1
-  const scored = players.map(p => ({
-    ...p,
-    score: Math.round((p.rawScore / maxScore) * 100)
-  }))
-  // 🏆 BEST BARGAIN = highest score relative to value
-  const bestBargain = [...scored].sort((a, b) => {
-    const aRatio = a.score / (a.value || 1)
-    const bRatio = b.score / (b.value || 1)
-    return bRatio - aRatio
-  })[0]?.name
-  return scored.map(p => ({
-    ...p,
-    isBestBargain: p.name === bestBargain
-  }))
-}
-// ---------------- STAT BAR ----------------
-const StatBar = ({ label, value }: { label: string; value: number }) => (
-  <div style={{ marginBottom: "6px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#aaa" }}>
-      <span>{label}</span>
-      <span>{value}</span>
-    </div>
-    <div style={{ background: "#333", height: "6px", borderRadius: "4px" }}>
-      <div
-        style={{
-          width: `${Math.min(value, 100)}%`,
-          background: "#4ade80",
-          height: "6px",
-          borderRadius: "4px"
-        }}
-      />
-    </div>
-  </div>
-)
-// ---------------- PLAYER CARD ----------------
-const PlayerCard = ({ player }: { player: any }) => {
-  const s = player.stats
+// CALCULATE SCORE
+const calculateScore = (row: any): number => {
   return (
-    <div style={{
-      background: player.isBestBargain ? "#065f46" : "#1e293b",
-      padding: "12px",
-      borderRadius: "12px",
-      width: "220px",
-      color: "white",
-      border: player.isBestBargain ? "2px solid gold" : "none"
-    }}>
-      {player.isBestBargain && (
-        <div style={{ color: "gold", fontSize: "12px" }}>
-          🏆 BEST BARGAIN
-        </div>
-      )}
-      <h3>{player.name}</h3>
-      <p style={{ fontSize: "12px", color: "#aaa" }}>
-        {player.position} • Age {player.age}
-      </p>
-      <p style={{ color: "#4ade80", fontWeight: "bold" }}>
-        {player.score} — {player.type}
-      </p>
-      <div style={{ marginTop: "10px" }}>
-        {player.type === "ATT" && (
-          <>
-            <StatBar label="Goals" value={safe(s["Goals"]) * 5} />
-            <StatBar label="xG" value={safe(s["xG"]) * 5} />
-            <StatBar label="Shots" value={safe(s["Shots"])} />
-          </>
-        )}
-        {player.type === "MID" && (
-          <>
-            <StatBar label="Key Passes" value={safe(s["Key Passes"])} />
-            <StatBar label="Progressive" value={safe(s["Progressive Passes"])} />
-            <StatBar label="Pass %" value={safe(s["Pass Completion %"])} />
-          </>
-        )}
-        {player.type === "DEF" && (
-          <>
-            <StatBar label="Tackles" value={safe(s["Tackles"])} />
-            <StatBar label="Interceptions" value={safe(s["Interceptions"])} />
-            <StatBar label="Aerials" value={safe(s["Aerial Duels Won"])} />
-          </>
-        )}
-        {player.type === "GK" && (
-          <>
-            <StatBar label="Save %" value={safe(s["Save %"])} />
-            <StatBar label="Saves" value={safe(s["Saves"])} />
-            <StatBar label="Clean Sheets" value={safe(s["Clean Sheets"]) * 5} />
-          </>
-        )}
-      </div>
-    </div>
+    safe(row["Key Passes"]) * 2 +
+    safe(row["Progressive Passes"]) * 1.5 +
+    safe(row["Pass %"]) * 1
   )
 }
-// ---------------- MAIN APP ----------------
-export default function Page() {
-  const [players, setPlayers] = useState<any[]>([])
-  const handleFile = (file: File) => {
+export default function Home() {
+  const [players, setPlayers] = useState<Player[]>([])
+  const handleFile = (e: any) => {
+    const file = e.target.files[0]
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results: any) => {
-        const processed = processPlayers(results.data)
-        setPlayers(processed)
-      }
+        const cleaned = cleanData(results.data)
+        const mapped: Player[] = cleaned.map((row: any) => {
+          const score = calculateScore(row)
+          const value = safe(row["Value"])
+          return {
+            name: row["Name"],
+            age: safe(row["Age"]),
+            position: detectPosition(row),
+            score,
+            value,
+          }
+        })
+        // SORT BY SCORE
+        const sorted = [...mapped].sort((a, b) => b.score - a.score)
+        // BEST BARGAIN (score/value)
+        const bestValue = Math.max(
+          ...sorted.map((p) => p.score / (p.value || 1))
+        )
+        const finalPlayers = sorted.map((p) => ({
+          ...p,
+          best: (p.score / (p.value || 1)) === bestValue,
+        }))
+        setPlayers(finalPlayers)
+      },
     })
   }
   return (
-    <div style={{ padding: "20px", background: "#0f172a", minHeight: "100vh" }}>
-      <h1 style={{ color: "white" }}>FM Value Scout</h1>
-      <input
-        type="file"
-        accept=".csv"
-        onChange={(e: any) => handleFile(e.target.files[0])}
-        style={{ marginBottom: "20px" }}
-      />
-      <div style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "12px"
-      }}>
-        {players.map((p, i) => (
-          <PlayerCard key={i} player={p} />
-        ))}
+    <div className="min-h-screen bg-[#0B1220] text-white p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* HEADER */}
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-green-400">
+            ValueScout
+          </h1>
+          <p className="text-gray-400">
+            Find the best bargains instantly ⚽
+          </p>
+        </header>
+        {/* UPLOAD */}
+        <div className="mb-8 p-6 bg-[#111827] rounded-xl border border-gray-700">
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFile}
+            className="text-sm"
+          />
+        </div>
+        {/* EMPTY STATE */}
+        {players.length === 0 && (
+          <div className="text-gray-500 text-center mt-20">
+            Upload a CSV to start scouting players ⚽
+          </div>
+        )}
+        {/* PLAYER GRID */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {players.slice(0, 12).map((p, i) => (
+            <div
+              key={i}
+              className={`p-5 rounded-xl border transition hover:scale-105 ${
+                p.best
+                  ? "bg-green-900/30 border-green-400 shadow-lg shadow-green-500/20"
+                  : "bg-[#111827] border-gray-700"
+              }`}
+            >
+              {p.best && (
+                <div className="text-xs text-green-400 mb-2">
+                  🏆 BEST BARGAIN
+                </div>
+              )}
+              <h2 className="text-lg font-semibold">{p.name}</h2>
+              <p className="text-sm text-gray-400">
+                {p.position} • Age {p.age}
+              </p>
+              <div className="mt-4 space-y-2 text-sm">
+                <div>Score: {Math.round(p.score)}</div>
+                <div>Value: {p.value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

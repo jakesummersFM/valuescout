@@ -2,11 +2,7 @@
 
 import React, { useState } from "react"
 import Papa from "papaparse"
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
-} from "recharts"
 
-// ✅ FIX TYPE ERRORS
 type Player = {
   Name: string
   Value: number
@@ -18,24 +14,19 @@ type Player = {
 
 export default function Page() {
   const [players, setPlayers] = useState<Player[]>([])
+  const [selected, setSelected] = useState<Player | null>(null)
+  const [shortlist, setShortlist] = useState<Player[]>([])
   const [position, setPosition] = useState("ATT")
 
-  const num = (v: any) => {
-    const n = Number(v)
-    return isNaN(n) ? 0 : n
-  }
+  const num = (v: any) => Number(v) || 0
 
-  const normalize = (val: number, min: number, max: number) => {
-    if (max === min) return 0
-    return (val - min) / (max - min)
-  }
+  const normalize = (val: number, min: number, max: number) =>
+    max === min ? 0 : (val - min) / (max - min)
 
   const calculateScores = (data: any[]): Player[] => {
-    if (!data || data.length === 0) return []
-
     const clean = data.filter(p => p.Name)
 
-    const get = (key: string) => clean.map(p => num(p[key]))
+    const get = (k: string) => clean.map(p => num(p[k]))
 
     let metrics: any = {}
 
@@ -51,9 +42,9 @@ export default function Page() {
     if (position === "MID") {
       metrics = {
         key: get("Key Passes"),
+        ast: get("Assists"),
         prog: get("Progressive Passes"),
-        pass: get("Pass %"),
-        ast: get("Assists")
+        pass: get("Pass %")
       }
     }
 
@@ -86,8 +77,7 @@ export default function Page() {
       let score = 0
 
       const add = (key: string, weight: number) => {
-        const val = metrics[key][i]
-        score += normalize(val, mins[key], maxs[key]) * weight
+        score += normalize(metrics[key][i], mins[key], maxs[key]) * weight
       }
 
       if (position === "ATT") {
@@ -99,9 +89,9 @@ export default function Page() {
 
       if (position === "MID") {
         add("key", 0.3)
-        add("prog", 0.3)
+        add("ast", 0.25)
+        add("prog", 0.25)
         add("pass", 0.2)
-        add("ast", 0.2)
       }
 
       if (position === "DEF") {
@@ -118,17 +108,14 @@ export default function Page() {
       }
 
       const finalScore = Math.round(score * 100)
-
       const value = num(p.Value) || 1
       const valueScore = finalScore / value
 
       let tag = "🔴 Weak"
-      if (finalScore >= 85) tag = "🟢 Elite"
-      else if (finalScore >= 70) tag = "🟢 Strong"
-      else if (finalScore >= 55) tag = "🟡 Decent"
-
-      if (valueScore > 0.02 && finalScore > 70) tag = "💎 Hidden Gem"
-      if (valueScore < 0.005 && finalScore < 60) tag = "⚠️ Overpriced"
+      if (finalScore > 80 && valueScore > 0.02) tag = "💎 Hidden Gem"
+      else if (finalScore > 75) tag = "🟢 Elite"
+      else if (finalScore > 60) tag = "🟡 Solid"
+      else if (finalScore < 50 && value > 20) tag = "⚠️ Overpriced"
 
       return {
         ...p,
@@ -147,19 +134,23 @@ export default function Page() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
-        const scored = calculateScores(results.data)
+      complete: (res) => {
+        const scored = calculateScores(res.data)
         setPlayers(scored)
       }
     })
   }
 
-  const exportCSV = () => {
+  const addToShortlist = (p: Player) => {
+    if (!shortlist.find(x => x.Name === p.Name)) {
+      setShortlist([...shortlist, p])
+    }
+  }
+
+  const exportShortlist = () => {
     const rows = [
       ["Name", "Score", "Value", "Wage", "Tag"],
-      ...players.map(p => [
-        p.Name, p.score, p.Value, p.Wage, p.tag
-      ])
+      ...shortlist.map(p => [p.Name, p.score, p.Value, p.Wage, p.tag])
     ]
 
     const blob = new Blob([rows.map(r => r.join(",")).join("\n")])
@@ -167,15 +158,35 @@ export default function Page() {
 
     const a = document.createElement("a")
     a.href = url
-    a.download = "fm_value_scout.csv"
+    a.download = "shortlist.csv"
     a.click()
   }
 
+  const StatBar = ({ label, value }: any) => (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ fontSize: 12 }}>{label}</div>
+      <div style={{ background: "#1f2937", height: 8, borderRadius: 4 }}>
+        <div style={{
+          width: `${Math.min(value, 100)}%`,
+          background: "#22c55e",
+          height: "100%",
+          borderRadius: 4
+        }} />
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ padding: 20, background: "#0B1220", minHeight: "100vh", color: "white" }}>
+    <div style={{ background: "#0B1220", color: "white", minHeight: "100vh", padding: 20 }}>
+
+      {/* HEADER */}
       <h1 style={{ color: "#22c55e" }}>FM Value Scout</h1>
 
-      <select value={position} onChange={(e) => setPosition(e.target.value)}>
+      <div style={{ marginBottom: 10 }}>
+        ⚠️ Upload one position at a time for accurate results
+      </div>
+
+      <select value={position} onChange={e => setPosition(e.target.value)}>
         <option value="ATT">Attackers</option>
         <option value="MID">Midfielders</option>
         <option value="DEF">Defenders</option>
@@ -184,32 +195,95 @@ export default function Page() {
 
       <input type="file" onChange={handleUpload} />
 
-      <button onClick={exportCSV}>Export</button>
+      <button onClick={exportShortlist}>Export Shortlist</button>
 
-      {players.map((p, i) => (
-        <div key={i} style={{
-          marginTop: 20,
-          padding: 15,
-          background: "#111827",
-          borderRadius: 10,
-          border: "1px solid #22c55e"
-        }}>
-          <h3>{p.Name}</h3>
-          <p>Score: {p.score} | {p.tag}</p>
-          <p>Value: £{p.Value} | Wage: £{p.Wage}</p>
+      {/* MAIN LAYOUT */}
+      <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
 
-          <div style={{ width: "100%", height: 150 }}>
-            <ResponsiveContainer>
-              <BarChart data={[{ name: "Score", value: p.score }]}>
-                <XAxis dataKey="name" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Bar dataKey="value" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        {/* LEFT TABLE */}
+        <div style={{ width: "40%" }}>
+          <h3>Players</h3>
+
+          {players.map((p, i) => (
+            <div key={i}
+              onClick={() => setSelected(p)}
+              style={{
+                padding: 10,
+                marginBottom: 8,
+                background: "#111827",
+                borderRadius: 8,
+                cursor: "pointer"
+              }}>
+              {p.Name} — {p.score} ({p.tag})
+            </div>
+          ))}
         </div>
-      ))}
+
+        {/* RIGHT PANEL */}
+        <div style={{ width: "60%" }}>
+          {selected && (
+            <div style={{
+              padding: 20,
+              background: "#111827",
+              borderRadius: 12
+            }}>
+              <h2>{selected.Name}</h2>
+              <p>{selected.score} — {selected.tag}</p>
+
+              <p>💰 £{selected.Value} | 💸 £{selected.Wage}</p>
+
+              {/* STAT BARS */}
+              {position === "ATT" && (
+                <>
+                  <StatBar label="Goals" value={selected.Goals * 5} />
+                  <StatBar label="xG" value={selected.xG * 5} />
+                  <StatBar label="Shots" value={selected.Shots} />
+                  <StatBar label="Conversion"
+                    value={(selected.Goals / (selected.Shots || 1)) * 100} />
+                </>
+              )}
+
+              {position === "MID" && (
+                <>
+                  <StatBar label="Key Passes" value={selected["Key Passes"] * 5} />
+                  <StatBar label="Assists" value={selected.Assists * 10} />
+                  <StatBar label="Prog Passes" value={selected["Progressive Passes"] * 5} />
+                  <StatBar label="Pass %" value={selected["Pass %"]} />
+                </>
+              )}
+
+              {position === "DEF" && (
+                <>
+                  <StatBar label="Tackles" value={selected.Tackles * 5} />
+                  <StatBar label="Interceptions" value={selected.Interceptions * 5} />
+                  <StatBar label="Clearances" value={selected.Clearances * 5} />
+                  <StatBar label="Aerials" value={selected["Aerials Won"] * 5} />
+                </>
+              )}
+
+              {position === "GK" && (
+                <>
+                  <StatBar label="Save %" value={selected["Save %"]} />
+                  <StatBar label="Saves" value={selected.Saves * 2} />
+                  <StatBar label="Clean Sheets" value={selected["Clean Sheets"] * 5} />
+                </>
+              )}
+
+              <button onClick={() => addToShortlist(selected)}>
+                ⭐ Add to Shortlist
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SHORTLIST */}
+      <div style={{ marginTop: 30 }}>
+        <h3>⭐ Shortlist</h3>
+        {shortlist.map((p, i) => (
+          <div key={i}>{p.Name} — {p.score}</div>
+        ))}
+      </div>
     </div>
   )
 }

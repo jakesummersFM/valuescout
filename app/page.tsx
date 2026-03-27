@@ -1,6 +1,8 @@
+
+
 "use client"
 
-import React, { useState } from "react"
+import { useState } from "react"
 import Papa from "papaparse"
 
 type Player = {
@@ -20,64 +22,66 @@ export default function Page() {
 
   const num = (v: any) => Number(v) || 0
 
-  const normalize = (val: number, min: number, max: number) =>
-    max === min ? 0 : (val - min) / (max - min)
+  const normalize = (val: number, min: number, max: number) => {
+    if (max === min) return 0
+    return (val - min) / (max - min)
+  }
 
   const calculateScores = (data: any[]): Player[] => {
     const clean = data.filter(p => p.Name)
 
-    const get = (k: string) => clean.map(p => num(p[k]))
+    const metric = (key: string) => clean.map(p => num(p[key]))
 
-    let metrics: any = {}
+    let m: any = {}
 
     if (position === "ATT") {
-      metrics = {
-        goals: get("Goals"),
-        xg: get("xG"),
-        shots: get("Shots"),
-        conv: clean.map(p => num(p["Goals"]) / (num(p["Shots"]) || 1))
+      m = {
+        goals: metric("Goals"),
+        xg: metric("xG"),
+        shots: metric("Shots"),
+        conv: clean.map(p => num(p.Goals) / (num(p.Shots) || 1))
       }
     }
 
     if (position === "MID") {
-      metrics = {
-        key: get("Key Passes"),
-        ast: get("Assists"),
-        prog: get("Progressive Passes"),
-        pass: get("Pass %")
+      m = {
+        key: metric("Key Passes"),
+        ast: metric("Assists"),
+        prog: metric("Progressive Passes"),
+        pass: metric("Pass %")
       }
     }
 
     if (position === "DEF") {
-      metrics = {
-        tkl: get("Tackles"),
-        int: get("Interceptions"),
-        clr: get("Clearances"),
-        aer: get("Aerials Won")
+      m = {
+        tkl: metric("Tackles"),
+        int: metric("Interceptions"),
+        clr: metric("Clearances"),
+        aer: metric("Aerials Won")
       }
     }
 
     if (position === "GK") {
-      metrics = {
-        save: get("Save %"),
-        saves: get("Saves"),
-        cs: get("Clean Sheets")
+      m = {
+        save: metric("Save %"),
+        saves: metric("Saves"),
+        cs: metric("Clean Sheets")
       }
     }
 
     const mins: any = {}
     const maxs: any = {}
 
-    Object.keys(metrics).forEach(k => {
-      mins[k] = Math.min(...metrics[k])
-      maxs[k] = Math.max(...metrics[k])
+    Object.keys(m).forEach(k => {
+      mins[k] = Math.min(...m[k])
+      maxs[k] = Math.max(...m[k])
     })
 
     return clean.map((p, i) => {
       let score = 0
 
       const add = (key: string, weight: number) => {
-        score += normalize(metrics[key][i], mins[key], maxs[key]) * weight
+        score += normalize(m[key][i], mins[key], maxs[key]) * weight
       }
 
       if (position === "ATT") {
@@ -112,7 +116,7 @@ export default function Page() {
       const valueScore = finalScore / value
 
       let tag = "🔴 Weak"
-      if (finalScore > 80 && valueScore > 0.02) tag = "💎 Hidden Gem"
+      if (finalScore > 85 && valueScore > 0.02) tag = "💎 Hidden Gem"
       else if (finalScore > 75) tag = "🟢 Elite"
       else if (finalScore > 60) tag = "🟡 Solid"
       else if (finalScore < 50 && value > 20) tag = "⚠️ Overpriced"
@@ -128,14 +132,14 @@ export default function Page() {
   }
 
   const handleUpload = (e: any) => {
-    const file = e.target.files[0]
+    const file = e.target.files?.[0]
     if (!file) return
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
       complete: (res) => {
-        const scored = calculateScores(res.data)
+        const scored = calculateScores(res.data as any[])
         setPlayers(scored)
       }
     })
@@ -162,8 +166,8 @@ export default function Page() {
     a.click()
   }
 
-  const StatBar = ({ label, value }: any) => (
-    <div style={{ marginBottom: 6 }}>
+  const Bar = ({ label, value }: any) => (
+    <div style={{ marginBottom: 8 }}>
       <div style={{ fontSize: 12 }}>{label}</div>
       <div style={{ background: "#1f2937", height: 8, borderRadius: 4 }}>
         <div style={{
@@ -178,13 +182,9 @@ export default function Page() {
 
   return (
     <div style={{ background: "#0B1220", color: "white", minHeight: "100vh", padding: 20 }}>
-
-      {/* HEADER */}
       <h1 style={{ color: "#22c55e" }}>FM Value Scout</h1>
 
-      <div style={{ marginBottom: 10 }}>
-        ⚠️ Upload one position at a time for accurate results
-      </div>
+      <p>⚠️ Upload ONE position at a time</p>
 
       <select value={position} onChange={e => setPosition(e.target.value)}>
         <option value="ATT">Attackers</option>
@@ -194,78 +194,54 @@ export default function Page() {
       </select>
 
       <input type="file" onChange={handleUpload} />
-
       <button onClick={exportShortlist}>Export Shortlist</button>
 
-      {/* MAIN LAYOUT */}
       <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
-
-        {/* LEFT TABLE */}
         <div style={{ width: "40%" }}>
-          <h3>Players</h3>
-
           {players.map((p, i) => (
-            <div key={i}
-              onClick={() => setSelected(p)}
-              style={{
-                padding: 10,
-                marginBottom: 8,
-                background: "#111827",
-                borderRadius: 8,
-                cursor: "pointer"
-              }}>
+            <div key={i} onClick={() => setSelected(p)}
+              style={{ padding: 10, marginBottom: 8, background: "#111827", cursor: "pointer" }}>
               {p.Name} — {p.score} ({p.tag})
             </div>
           ))}
         </div>
 
-        {/* RIGHT PANEL */}
         <div style={{ width: "60%" }}>
           {selected && (
-            <div style={{
-              padding: 20,
-              background: "#111827",
-              borderRadius: 12
-            }}>
+            <div style={{ padding: 20, background: "#111827" }}>
               <h2>{selected.Name}</h2>
               <p>{selected.score} — {selected.tag}</p>
+              <p>£{selected.Value} | £{selected.Wage}</p>
 
-              <p>💰 £{selected.Value} | 💸 £{selected.Wage}</p>
-
-              {/* STAT BARS */}
               {position === "ATT" && (
                 <>
-                  <StatBar label="Goals" value={selected.Goals * 5} />
-                  <StatBar label="xG" value={selected.xG * 5} />
-                  <StatBar label="Shots" value={selected.Shots} />
-                  <StatBar label="Conversion"
-                    value={(selected.Goals / (selected.Shots || 1)) * 100} />
+                  <Bar label="Goals" value={selected.Goals * 5} />
+                  <Bar label="xG" value={selected.xG * 5} />
+                  <Bar label="Shots" value={selected.Shots} />
                 </>
               )}
 
               {position === "MID" && (
                 <>
-                  <StatBar label="Key Passes" value={selected["Key Passes"] * 5} />
-                  <StatBar label="Assists" value={selected.Assists * 10} />
-                  <StatBar label="Prog Passes" value={selected["Progressive Passes"] * 5} />
-                  <StatBar label="Pass %" value={selected["Pass %"]} />
+                  <Bar label="Key Passes" value={selected["Key Passes"] * 5} />
+                  <Bar label="Assists" value={selected.Assists * 10} />
+                  <Bar label="Progressive" value={selected["Progressive Passes"] * 5} />
                 </>
               )}
 
               {position === "DEF" && (
                 <>
-                  <StatBar label="Tackles" value={selected.Tackles * 5} />
-                  <StatBar label="Interceptions" value={selected.Interceptions * 5} />
-                  <StatBar label="Clearances" value={selected.Clearances * 5} />
-                  <StatBar label="Aerials" value={selected["Aerials Won"] * 5} />
+                  <Bar label="Tackles" value={selected.Tackles * 5} />
+                  <Bar label="Interceptions" value={selected.Interceptions * 5} />
+                  <Bar label="Clearances" value={selected.Clearances * 5} />
                 </>
               )}
 
               {position === "GK" && (
                 <>
-                  <StatBar label="Save %" value={selected["Save %"]} />
-                  <StatBar label="Saves" value={selected.Saves * 2} />
-                  <StatBar label="Clean Sheets" value={selected["Clean Sheets"] * 5} />
+                  <Bar label="Save %" value={selected["Save %"]} />
+                  <Bar label="Saves" value={selected.Saves * 2} />
+                  <Bar label="Clean Sheets" value={selected["Clean Sheets"] * 5} />
                 </>
               )}
 
@@ -277,13 +253,10 @@ export default function Page() {
         </div>
       </div>
 
-      {/* SHORTLIST */}
-      <div style={{ marginTop: 30 }}>
-        <h3>⭐ Shortlist</h3>
-        {shortlist.map((p, i) => (
-          <div key={i}>{p.Name} — {p.score}</div>
-        ))}
-      </div>
+      <h3>Shortlist</h3>
+      {shortlist.map((p, i) => (
+        <div key={i}>{p.Name} — {p.score}</div>
+      ))}
     </div>
   )
 }

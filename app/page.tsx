@@ -2,180 +2,214 @@
 
 import React, { useState } from "react"
 import Papa from "papaparse"
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer
+} from "recharts"
 
+// ✅ FIX TYPE ERRORS
 type Player = {
-  name: string
-  age: number
-  position: string
+  Name: string
+  Value: number
+  Wage: number
   score: number
-  value: number
-  valueScore: number
-  best?: boolean
-  wonderkid?: boolean
+  tag: string
+  [key: string]: any
 }
 
-// SAFE NUMBER
-const safe = (val: any): number => {
-  const num = Number(val)
-  return isNaN(num) ? 0 : num
-}
-
-// CLEAN DATA
-const cleanData = (data: any[]): any[] => {
-  return data.filter((row) => row["Name"])
-}
-
-// FM POSITION SCORING
-const calculateScore = (row: any): number => {
-  const pos = row["Position"] || ""
-
-  const key = safe(row["Key Passes"])
-  const prog = safe(row["Progressive Passes"])
-  const pass = safe(row["Pass %"])
-
-  // STRIKERS
-  if (pos.includes("ST")) {
-    return key * 1 + prog * 1.2 + pass * 0.5
-  }
-
-  // MIDFIELDERS
-  if (pos.match(/CM|AM|DM/)) {
-    return key * 2 + prog * 1.5 + pass * 1
-  }
-
-  // DEFENDERS
-  if (pos.match(/CB|LB|RB/)) {
-    return prog * 1.2 + pass * 1.5
-  }
-
-  return key + prog + pass
-}
-
-// WONDERKID
-const isWonderkid = (age: number, score: number) => {
-  return age <= 21 && score > 150
-}
-
-// VALUE SCORE
-const valueScore = (score: number, value: number) => {
-  if (!value) return score
-  return score / value
-}
-
-export default function Home() {
+export default function Page() {
   const [players, setPlayers] = useState<Player[]>([])
+  const [position, setPosition] = useState("ATT")
 
-  const handleFile = (e: any) => {
+  const num = (v: any) => {
+    const n = Number(v)
+    return isNaN(n) ? 0 : n
+  }
+
+  const normalize = (val: number, min: number, max: number) => {
+    if (max === min) return 0
+    return (val - min) / (max - min)
+  }
+
+  const calculateScores = (data: any[]): Player[] => {
+    if (!data || data.length === 0) return []
+
+    const clean = data.filter(p => p.Name)
+
+    const get = (key: string) => clean.map(p => num(p[key]))
+
+    let metrics: any = {}
+
+    if (position === "ATT") {
+      metrics = {
+        goals: get("Goals"),
+        xg: get("xG"),
+        shots: get("Shots"),
+        conv: clean.map(p => num(p["Goals"]) / (num(p["Shots"]) || 1))
+      }
+    }
+
+    if (position === "MID") {
+      metrics = {
+        key: get("Key Passes"),
+        prog: get("Progressive Passes"),
+        pass: get("Pass %"),
+        ast: get("Assists")
+      }
+    }
+
+    if (position === "DEF") {
+      metrics = {
+        tkl: get("Tackles"),
+        int: get("Interceptions"),
+        clr: get("Clearances"),
+        aer: get("Aerials Won")
+      }
+    }
+
+    if (position === "GK") {
+      metrics = {
+        save: get("Save %"),
+        saves: get("Saves"),
+        cs: get("Clean Sheets")
+      }
+    }
+
+    const mins: any = {}
+    const maxs: any = {}
+
+    Object.keys(metrics).forEach(k => {
+      mins[k] = Math.min(...metrics[k])
+      maxs[k] = Math.max(...metrics[k])
+    })
+
+    return clean.map((p, i) => {
+      let score = 0
+
+      const add = (key: string, weight: number) => {
+        const val = metrics[key][i]
+        score += normalize(val, mins[key], maxs[key]) * weight
+      }
+
+      if (position === "ATT") {
+        add("goals", 0.3)
+        add("xg", 0.25)
+        add("shots", 0.15)
+        add("conv", 0.3)
+      }
+
+      if (position === "MID") {
+        add("key", 0.3)
+        add("prog", 0.3)
+        add("pass", 0.2)
+        add("ast", 0.2)
+      }
+
+      if (position === "DEF") {
+        add("tkl", 0.25)
+        add("int", 0.25)
+        add("clr", 0.25)
+        add("aer", 0.25)
+      }
+
+      if (position === "GK") {
+        add("save", 0.5)
+        add("saves", 0.3)
+        add("cs", 0.2)
+      }
+
+      const finalScore = Math.round(score * 100)
+
+      const value = num(p.Value) || 1
+      const valueScore = finalScore / value
+
+      let tag = "🔴 Weak"
+      if (finalScore >= 85) tag = "🟢 Elite"
+      else if (finalScore >= 70) tag = "🟢 Strong"
+      else if (finalScore >= 55) tag = "🟡 Decent"
+
+      if (valueScore > 0.02 && finalScore > 70) tag = "💎 Hidden Gem"
+      if (valueScore < 0.005 && finalScore < 60) tag = "⚠️ Overpriced"
+
+      return {
+        ...p,
+        Value: num(p.Value),
+        Wage: num(p.Wage),
+        score: finalScore,
+        tag
+      }
+    }).sort((a, b) => b.score - a.score)
+  }
+
+  const handleUpload = (e: any) => {
     const file = e.target.files[0]
+    if (!file) return
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results: any) => {
-        const cleaned = cleanData(results.data)
-
-        const mapped: Player[] = cleaned.map((row: any) => {
-          const score = calculateScore(row)
-          const value = safe(row["Value"])
-
-          return {
-            name: row["Name"],
-            age: safe(row["Age"]),
-            position: row["Position"],
-            score,
-            value,
-            valueScore: valueScore(score, value),
-          }
-        })
-
-        // ENRICH
-        const enriched = mapped.map((p) => ({
-          ...p,
-          wonderkid: isWonderkid(p.age, p.score),
-        }))
-
-        // SORT BY PERFORMANCE
-        const sorted = [...enriched].sort((a, b) => b.score - a.score)
-
-        // BEST BARGAIN
-        const bestValue = Math.max(...enriched.map((p) => p.valueScore))
-
-        const finalPlayers = sorted.map((p) => ({
-          ...p,
-          best: p.valueScore === bestValue,
-        }))
-
-        setPlayers(finalPlayers)
-      },
+      complete: (results) => {
+        const scored = calculateScores(results.data)
+        setPlayers(scored)
+      }
     })
   }
 
+  const exportCSV = () => {
+    const rows = [
+      ["Name", "Score", "Value", "Wage", "Tag"],
+      ...players.map(p => [
+        p.Name, p.score, p.Value, p.Wage, p.tag
+      ])
+    ]
+
+    const blob = new Blob([rows.map(r => r.join(",")).join("\n")])
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "fm_value_scout.csv"
+    a.click()
+  }
+
   return (
-    <div className="min-h-screen bg-[#0B1220] text-white p-6">
-      <div className="max-w-6xl mx-auto">
+    <div style={{ padding: 20, background: "#0B1220", minHeight: "100vh", color: "white" }}>
+      <h1 style={{ color: "#22c55e" }}>FM Value Scout</h1>
 
-        {/* HEADER */}
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-green-400">
-            ValueScout
-          </h1>
-          <p className="text-gray-400">
-            Find the best bargains instantly ⚽
-          </p>
-        </header>
+      <select value={position} onChange={(e) => setPosition(e.target.value)}>
+        <option value="ATT">Attackers</option>
+        <option value="MID">Midfielders</option>
+        <option value="DEF">Defenders</option>
+        <option value="GK">Goalkeepers</option>
+      </select>
 
-        {/* UPLOAD */}
-        <div className="mb-8 p-6 bg-[#111827] rounded-xl border border-gray-700">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFile}
-            className="text-sm"
-          />
-        </div>
+      <input type="file" onChange={handleUpload} />
 
-        {/* EMPTY */}
-        {players.length === 0 && (
-          <div className="text-gray-500 text-center mt-20">
-            Upload a CSV to start scouting players ⚽
+      <button onClick={exportCSV}>Export</button>
+
+      {players.map((p, i) => (
+        <div key={i} style={{
+          marginTop: 20,
+          padding: 15,
+          background: "#111827",
+          borderRadius: 10,
+          border: "1px solid #22c55e"
+        }}>
+          <h3>{p.Name}</h3>
+          <p>Score: {p.score} | {p.tag}</p>
+          <p>Value: £{p.Value} | Wage: £{p.Wage}</p>
+
+          <div style={{ width: "100%", height: 150 }}>
+            <ResponsiveContainer>
+              <BarChart data={[{ name: "Score", value: p.score }]}>
+                <XAxis dataKey="name" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip />
+                <Bar dataKey="value" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        )}
-
-        {/* GRID */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {players.slice(0, 12).map((p, i) => (
-            <div
-              key={i}
-              className={`p-5 rounded-xl border transition hover:scale-105 ${
-                p.best
-                  ? "bg-green-900/30 border-green-400 shadow-lg shadow-green-500/20"
-                  : "bg-[#111827] border-gray-700"
-              }`}
-            >
-              {/* BADGES */}
-              <div className="flex gap-2 mb-2 text-xs">
-                {p.best && (
-                  <span className="text-green-400">🏆 BEST BARGAIN</span>
-                )}
-                {p.wonderkid && (
-                  <span className="text-blue-400">💎 WONDERKID</span>
-                )}
-              </div>
-
-              <h2 className="text-lg font-semibold">{p.name}</h2>
-              <p className="text-sm text-gray-400">
-                {p.position} • Age {p.age}
-              </p>
-
-              <div className="mt-4 space-y-2 text-sm">
-                <div>Score: {Math.round(p.score)}</div>
-                <div>Value: £{p.value.toLocaleString()}</div>
-              </div>
-            </div>
-          ))}
         </div>
-
-      </div>
+      ))}
     </div>
   )
 }

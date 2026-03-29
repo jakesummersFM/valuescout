@@ -135,14 +135,50 @@ export default function Page() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => {
-        const scored = calculateScores(res.data as any[])
-        setPlayers(scored)
-      }
-    })
+    try {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (res: any) => {
+          // ✅ CLEAN DATA + FIX NAME
+          const cleaned = (res.data as any[])
+            .filter((row: any) => row && Object.keys(row).length > 0)
+            .map((row: any) => ({
+              ...row,
+
+              // 🔥 NAME FIX (THIS IS THE IMPORTANT BIT)
+              Name: row["Name"] || row["Player"] || "Unknown",
+
+              // BASIC STATS (safe fallback)
+              Goals: Number(row["Goals"] || row["Gls"] || 0),
+              xG: Number(row["xG"] || 0),
+              Shots: Number(row["Shots"] || row["Sh"] || 0),
+
+              Assists: Number(row["Assists"] || row["Ast"] || 0),
+              "Key Passes": Number(row["Key Passes"] || row["KP"] || 0),
+
+              Tackles: Number(row["Tackles"] || 0),
+              Interceptions: Number(row["Interceptions"] || 0),
+              Clearances: Number(row["Clearances"] || 0),
+
+              Value: Number(row["Value"] || row["Transfer Value"] || 0),
+              Wage: Number(row["Wage"] || row["Salary"] || 0),
+
+              Position: row["Position"] || "",
+            }))
+            .filter((p: any) => p.Name && p.Name !== "Unknown")
+
+          // ✅ SCORE (UNCHANGED)
+          const scored = calculateScores(cleaned)
+
+          // ✅ SET STATE
+          setPlayers(scored)
+        }
+      })
+    } catch (e) {
+      console.error(e)
+      alert("Upload failed. Try a different file.")
+    }
   }
 
   const addToShortlist = (p: Player) => {
@@ -150,13 +186,11 @@ export default function Page() {
       setShortlist([...shortlist, p])
     }
   }
-
   const exportShortlist = () => {
     const rows = [
       ["Name", "Score", "Value", "Wage", "Tag"],
       ...shortlist.map(p => [p.Name, p.score, p.Value, p.Wage, p.tag])
     ]
-
     const blob = new Blob([rows.map(r => r.join(",")).join("\n")])
     const url = URL.createObjectURL(blob)
 

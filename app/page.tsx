@@ -1,296 +1,416 @@
+'use client';
 
+import React, { useState, useCallback } from 'react';
+import Papa from 'papaparse';
+import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle } from 'lucide-react';
+import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
-"use client"
-
-import { useState } from "react"
-import Papa from "papaparse"
-
-type Player = {
-  Name: string
-  Value: number
-  Wage: number
-  score: number
-  tag: string
-  [key: string]: any
+interface Player {
+  id: number;
+  rank: number;
+  name: string;
+  nationality: string;
+  age: number;
+  valueScore: number;
+  keyStat: string;
+  transferValue: string;
+  wage: string;
+  rawData?: any; // Store original row for future advanced calculations
 }
 
-export default function Page() {
-  const [players, setPlayers] = useState<Player[]>([])
-  const [selected, setSelected] = useState<Player | null>(null)
-  const [shortlist, setShortlist] = useState<Player[]>([])
-  const [position, setPosition] = useState("ATT")
+const positions = ['Attackers', 'Midfielders', 'Defenders', 'Goalkeepers'];
 
-  const num = (v: any) => Number(v) || 0
+export default function ValueScout() {
+  const [activePosition, setActivePosition] = useState('Attackers');
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const normalize = (val: number, min: number, max: number) => {
-    if (max === min) return 0
-    return (val - min) / (max - min)
-  }
+  // Simple mock Value Score calculator (replace with your real logic later)
+  const calculateValueScore = (row: any, position: string): number => {
+    // Example logic - customize based on your actual FM CSV columns
+    let performance = 0;
+    let costEfficiency = 0;
 
-  const calculateScores = (data: any[]): Player[] => {
-    const clean = data.filter(p => p.Name)
+    // Common FM columns you might have
+    const goals = parseFloat(row.Goals) || 0;
+    const assists = parseFloat(row.Assists) || 0;
+    const xG = parseFloat(row['xG']) || parseFloat(row['Expected Goals']) || 0;
+    const value = parseFloat((row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1;
+    const wage = parseFloat((row.Wage || row['Weekly Wage'] || '0').replace(/[^0-9.]/g, '')) || 1;
 
-    const metric = (key: string) => clean.map(p => num(p[key]))
-
-    let m: any = {}
-
-    if (position === "ATT") {
-      m = {
-        goals: metric("Goals"),
-        xg: metric("xG"),
-        shots: metric("Shots"),
-        conv: clean.map(p => num(p.Goals) / (num(p.Shots) || 1))
-      }
+    if (position === 'Attackers') {
+      performance = (goals * 1.5 + assists + (xG > 0 ? goals / xG * 20 : 0));
+    } else if (position === 'Midfielders') {
+      performance = (assists * 2 + (parseFloat(row.Tackles) || 0) * 0.8 + (parseFloat(row['Key Passes']) || 0));
+    } else if (position === 'Defenders') {
+      performance = (parseFloat(row.Tackles) || 0) * 1.2 + (parseFloat(row.Interceptions) || 0) * 1.5;
+    } else {
+      performance = parseFloat(row['Save %']) || parseFloat(row.Saves) || 50;
     }
 
-    if (position === "MID") {
-      m = {
-        key: metric("Key Passes"),
-        ast: metric("Assists"),
-        prog: metric("Progressive Passes"),
-        pass: metric("Pass %")
-      }
-    }
+    costEfficiency = 10000 / (value / 1000000 + wage / 1000); // rough efficiency
 
-    if (position === "DEF") {
-      m = {
-        tkl: metric("Tackles"),
-        int: metric("Interceptions"),
-        clr: metric("Clearances"),
-        aer: metric("Aerials Won")
-      }
-    }
+    const score = Math.min(99, Math.max(40, Math.round(performance * 2 + costEfficiency / 10)));
+    return score;
+  };
 
-    if (position === "GK") {
-      m = {
-        save: metric("Save %"),
-        saves: metric("Saves"),
-        cs: metric("Clean Sheets")
-      }
-    }
+  const parseAndProcessCSV = useCallback((file: File) => {
+    setIsProcessing(true);
+    setUploadMessage(null);
 
-    const mins: any = {}
-    const maxs: any = {}
-
-    Object.keys(m).forEach(k => {
-      mins[k] = Math.min(...m[k])
-      maxs[k] = Math.max(...m[k])
-    })
-
-    return clean.map((p, i) => {
-      let score = 0
-
-      const add = (key: string, weight: number) => {
-        score += normalize(m[key][i], mins[key], maxs[key]) * weight
-      }
-
-      if (position === "ATT") {
-        add("goals", 0.3)
-        add("xg", 0.25)
-        add("shots", 0.15)
-        add("conv", 0.3)
-      }
-
-      if (position === "MID") {
-        add("key", 0.3)
-        add("ast", 0.25)
-        add("prog", 0.25)
-        add("pass", 0.2)
-      }
-
-      if (position === "DEF") {
-        add("tkl", 0.25)
-        add("int", 0.25)
-        add("clr", 0.25)
-        add("aer", 0.25)
-      }
-
-      if (position === "GK") {
-        add("save", 0.5)
-        add("saves", 0.3)
-        add("cs", 0.2)
-      }
-
-      const finalScore = Math.round(score * 100)
-      const value = num(p.Value) || 1
-      const valueScore = finalScore / value
-
-      let tag = "🔴 Weak"
-      if (finalScore > 85 && valueScore > 0.02) tag = "💎 Hidden Gem"
-      else if (finalScore > 75) tag = "🟢 Elite"
-      else if (finalScore > 60) tag = "🟡 Solid"
-      else if (finalScore < 50 && value > 20) tag = "⚠️ Overpriced"
-
-      return {
-        ...p,
-        Value: num(p.Value),
-        Wage: num(p.Wage),
-        score: finalScore,
-        tag
-      }
-    }).sort((a, b) => b.score - a.score)
-  }
-
-  const handleUpload = (e: any) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    try {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (res: any) => {
-          // ✅ CLEAN DATA + FIX NAME
-          const cleaned = (res.data as any[])
-            .filter((row: any) => row && Object.keys(row).length > 0)
-            .map((row: any) => ({
-              ...row,
-
-              // 🔥 NAME FIX (THIS IS THE IMPORTANT BIT)
-              Name: row["Name"] || row["Player"] || "Unknown",
-
-              // BASIC STATS (safe fallback)
-              Goals: Number(row["Goals"] || row["Gls"] || 0),
-              xG: Number(row["xG"] || 0),
-              Shots: Number(row["Shots"] || row["Sh"] || 0),
-
-              Assists: Number(row["Assists"] || row["Ast"] || 0),
-              "Key Passes": Number(row["Key Passes"] || row["KP"] || 0),
-
-              Tackles: Number(row["Tackles"] || 0),
-              Interceptions: Number(row["Interceptions"] || 0),
-              Clearances: Number(row["Clearances"] || 0),
-
-              Value: Number(row["Value"] || row["Transfer Value"] || 0),
-              Wage: Number(row["Wage"] || row["Salary"] || 0),
-
-              Position: row["Position"] || "",
-            }))
-            .filter((p: any) => p.Name && p.Name !== "Unknown")
-
-          // ✅ SCORE (UNCHANGED)
-          const scored = calculateScores(cleaned)
-
-          // ✅ SET STATE
-          setPlayers(scored)
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        if (results.data.length === 0) {
+          setUploadMessage({ type: 'error', text: 'CSV appears to be empty.' });
+          setIsProcessing(false);
+          return;
         }
-      })
-    } catch (e) {
-      console.error(e)
-      alert("Upload failed. Try a different file.")
+
+        const parsedPlayers: Player[] = results.data
+          .map((row: any, index: number) => {
+            const name = row.Name || row.Player || 'Unknown Player';
+            const nationality = row.Nationality || row.Nat || '🇬🇧';
+            const age = parseInt(row.Age) || 25;
+
+            const valueScore = calculateValueScore(row, activePosition);
+
+            let keyStat = 'N/A';
+            if (activePosition === 'Attackers') {
+              keyStat = `Goals/xG: ${(parseFloat(row.Goals) || 0).toFixed(1)}`;
+            } else if (activePosition === 'Midfielders') {
+              keyStat = `Assists: ${row.Assists || row['Key Passes'] || 'N/A'}`;
+            } else if (activePosition === 'Defenders') {
+              keyStat = `Tackles: ${row.Tackles || 'N/A'}`;
+            } else {
+              keyStat = `Save%: ${row['Save %'] || 'N/A'}`;
+            }
+
+            return {
+              id: Date.now() + index,
+              rank: index + 1,
+              name,
+              nationality: nationality.length > 3 ? '🌍' : nationality,
+              age,
+              valueScore,
+              keyStat,
+              transferValue: row['Transfer Value'] || row.Value || '£0',
+              wage: row.Wage || row['Weekly Wage'] || '£0',
+              rawData: row,
+            };
+          })
+          .sort((a, b) => b.valueScore - a.valueScore) // Initial sort by score
+          .map((player, idx) => ({ ...player, rank: idx + 1 }));
+
+        setPlayers(parsedPlayers);
+        setUploadMessage({ 
+          type: 'success', 
+          text: `Successfully loaded ${parsedPlayers.length} ${activePosition.toLowerCase()}!` 
+        });
+        setIsProcessing(false);
+      },
+      error: (error) => {
+        setUploadMessage({ type: 'error', text: `Parse error: ${error.message}` });
+        setIsProcessing(false);
+      }
+    });
+  }, [activePosition]);
+
+  const handleFileUpload = (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setUploadMessage({ type: 'error', text: 'Please upload a CSV file only.' });
+      return;
     }
-  }
+    parseAndProcessCSV(file);
+  };
 
-  const addToShortlist = (p: Player) => {
-    if (!shortlist.find(x => x.Name === p.Name)) {
-      setShortlist([...shortlist, p])
+  // Drag & Drop
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => setIsDragging(false);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  };
+
+  const addToShortlist = (player: Player) => {
+    if (!shortlist.find(p => p.id === player.id)) {
+      setShortlist([...shortlist, player]);
     }
-  }
-  const exportShortlist = () => {
-    const rows = [
-      ["Name", "Score", "Value", "Wage", "Tag"],
-      ...shortlist.map(p => [p.Name, p.score, p.Value, p.Wage, p.tag])
-    ]
-    const blob = new Blob([rows.map(r => r.join(",")).join("\n")])
-    const url = URL.createObjectURL(blob)
+  };
 
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "shortlist.csv"
-    a.click()
-  }
+  const removeFromShortlist = (id: number) => {
+    setShortlist(shortlist.filter(p => p.id !== id));
+  };
 
-  const Bar = ({ label, value }: any) => (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 12 }}>{label}</div>
-      <div style={{ background: "#1f2937", height: 8, borderRadius: 4 }}>
-        <div style={{
-          width: `${Math.min(value, 100)}%`,
-          background: "#22c55e",
-          height: "100%",
-          borderRadius: 4
-        }} />
-      </div>
-    </div>
-  )
+  // Table columns (same as before, slightly improved)
+  const columns = React.useMemo(() => [
+    { accessorKey: 'rank', header: 'Rank' },
+    {
+      accessorKey: 'name',
+      header: 'Player',
+      cell: ({ row }: any) => (
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">{row.original.nationality}</span>
+          <div>
+            <div className="font-semibold text-white">{row.original.name}</div>
+            <div className="text-xs text-zinc-500">Age {row.original.age}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'valueScore',
+      header: 'Value Score',
+      cell: ({ row }: any) => {
+        const score = row.original.valueScore;
+        const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-amber-500' : 'bg-orange-500';
+        return (
+          <div className="flex items-center gap-3 min-w-[140px]">
+            <div className="flex-1 h-3 bg-zinc-800 rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${color} transition-all duration-500`} 
+                style={{ width: `${score}%` }}
+              />
+            </div>
+            <div className="font-mono font-bold text-lg w-12 text-right flex items-center gap-1">
+              {score}
+              {score >= 92 && <Diamond className="text-emerald-400 w-5 h-5" />}
+            </div>
+          </div>
+        );
+      },
+    },
+    { accessorKey: 'keyStat', header: 'Key Stat' },
+    { accessorKey: 'transferValue', header: 'Value' },
+    { accessorKey: 'wage', header: 'Wage' },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }: any) => (
+        <button
+          onClick={() => addToShortlist(row.original)}
+          disabled={shortlist.some(p => p.id === row.original.id)}
+          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 rounded-xl text-sm flex items-center gap-2 transition font-medium"
+        >
+          <Plus className="w-4 h-4" /> Add
+        </button>
+      ),
+    },
+  ], [shortlist]);
+
+  const table = useReactTable({
+    data: players,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   return (
-    <div style={{ background: "#0B1220", color: "white", minHeight: "100vh", padding: 20 }}>
-      <h1 style={{ color: "#22c55e" }}>FM Value Scout</h1>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      {/* Navbar remains the same as previous version */}
 
-      <p>⚠️ Upload ONE position at a time</p>
-
-      <select value={position} onChange={e => setPosition(e.target.value)}>
-        <option value="ATT">Attackers</option>
-        <option value="MID">Midfielders</option>
-        <option value="DEF">Defenders</option>
-        <option value="GK">Goalkeepers</option>
-      </select>
-
-      <input type="file" onChange={handleUpload} />
-      <button onClick={exportShortlist}>Export Shortlist</button>
-
-      <div style={{ display: "flex", gap: 20, marginTop: 20 }}>
-        <div style={{ width: "40%" }}>
-          {players.map((p, i) => (
-            <div key={i} onClick={() => setSelected(p)}
-              style={{ padding: 10, marginBottom: 8, background: "#111827", cursor: "pointer" }}>
-              {p.Name} — {p.score} ({p.tag})
+      <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center text-black font-bold text-2xl">⚽</div>
+            <div>
+              <div className="text-2xl font-semibold tracking-tight">Value Scout</div>
+              <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager</div>
             </div>
-          ))}
-        </div>
-
-        <div style={{ width: "60%" }}>
-          {selected && (
-            <div style={{ padding: 20, background: "#111827" }}>
-              <h2>{selected.Name}</h2>
-              <p>{selected.score} — {selected.tag}</p>
-              <p>£{selected.Value} | £{selected.Wage}</p>
-
-              {position === "ATT" && (
-                <>
-                  <Bar label="Goals" value={selected.Goals * 5} />
-                  <Bar label="xG" value={selected.xG * 5} />
-                  <Bar label="Shots" value={selected.Shots} />
-                </>
-              )}
-
-              {position === "MID" && (
-                <>
-                  <Bar label="Key Passes" value={selected["Key Passes"] * 5} />
-                  <Bar label="Assists" value={selected.Assists * 10} />
-                  <Bar label="Progressive" value={selected["Progressive Passes"] * 5} />
-                </>
-              )}
-
-              {position === "DEF" && (
-                <>
-                  <Bar label="Tackles" value={selected.Tackles * 5} />
-                  <Bar label="Interceptions" value={selected.Interceptions * 5} />
-                  <Bar label="Clearances" value={selected.Clearances * 5} />
-                </>
-              )}
-
-              {position === "GK" && (
-                <>
-                  <Bar label="Save %" value={selected["Save %"]} />
-                  <Bar label="Saves" value={selected.Saves * 2} />
-                  <Bar label="Clean Sheets" value={selected["Clean Sheets"] * 5} />
-                </>
-              )}
-
-              <button onClick={() => addToShortlist(selected)}>
-                ⭐ Add to Shortlist
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="flex items-center gap-2 px-4 py-2 hover:bg-zinc-900 rounded-xl transition text-sm">
+              <Users className="w-4 h-4" /> How to Export
+            </button>
+            {shortlist.length > 0 && (
+              <button className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-xl flex items-center gap-2 font-medium">
+                <Download className="w-4 h-4" /> Export Shortlist
               </button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8">
+        {/* Main Content */}
+        <div className="flex-1 space-y-8">
+          {/* Upload Section */}
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
+            <h2 className="text-2xl font-semibold mb-2">Upload Scouting Data</h2>
+            <p className="text-zinc-400 mb-6">One position group only • CSV from FM Player Search</p>
+
+            {/* Position Tabs */}
+            <div className="flex gap-2 mb-8 flex-wrap">
+              {positions.map((pos) => (
+                <button
+                  key={pos}
+                  onClick={() => {
+                    setActivePosition(pos);
+                    setPlayers([]); // Clear previous results when switching
+                    setUploadMessage(null);
+                  }}
+                  className={`px-8 py-3 rounded-2xl font-medium transition-all ${
+                    activePosition === pos 
+                      ? 'bg-emerald-500 text-black shadow-lg' 
+                      : 'bg-zinc-800 hover:bg-zinc-700'
+                  }`}
+                >
+                  {pos}
+                </button>
+              ))}
+            </div>
+
+            {/* Drag & Drop */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-3xl p-20 text-center transition-all ${
+                isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700 hover:border-zinc-500'
+              }`}
+            >
+              <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
+              <p className="text-2xl font-medium mb-3">
+                {isProcessing ? 'Processing CSV...' : 'Drag & Drop your FM CSV here'}
+              </p>
+              <p className="text-zinc-400 mb-8">or click to browse</p>
+
+              <label className="inline-block bg-white hover:bg-zinc-200 text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer transition">
+                Select CSV File
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  className="hidden" 
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} 
+                />
+              </label>
+
+              {uploadMessage && (
+                <div className={`mt-6 flex items-center justify-center gap-3 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {uploadMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : null}
+                  {uploadMessage.text}
+                </div>
+              )}
+            </div>
+
+            <div className="text-center text-xs text-zinc-500 mt-6">
+              Tip: In FM, go to Player Search → customize columns → Ctrl + P → Web Page → Save as CSV
+            </div>
+          </div>
+
+          {/* Players Table */}
+          {players.length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+              <div className="px-8 py-5 border-b border-zinc-700 flex justify-between">
+                <h3 className="text-xl font-semibold">
+                  {activePosition} • {players.length} players ranked by Value Score
+                </h3>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    {table.getHeaderGroups().map((headerGroup: any) => (
+                      <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
+                        {headerGroup.headers.map((header: any) => (
+                          <th 
+                            key={header.id}
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="px-8 py-5 text-left text-sm font-medium text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </th>
+                        ))}
+                      </tr>
+                    ))}
+                  </thead>
+                  <tbody>
+                    {table.getRowModel().rows.map((row: any) => (
+                      <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
+                        {row.getVisibleCells().map((cell: any) => (
+                          <td key={cell.id} className="px-8 py-6">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
-      </div>
 
-      <h3>Shortlist</h3>
-      {shortlist.map((p, i) => (
-        <div key={i}>{p.Name} — {p.score}</div>
-      ))}
+        {/* Shortlist Sidebar - same as before */}
+        <div className="w-96 flex-shrink-0">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
+            {/* Shortlist content - unchanged from previous version */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-500/10 p-3 rounded-2xl">
+                  <Users className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="font-semibold text-lg">Shortlist</div>
+                  <div className="text-xs text-zinc-500">{shortlist.length} selected</div>
+                </div>
+              </div>
+              {shortlist.length > 0 && (
+                <button onClick={() => setShortlist([])} className="text-red-400 hover:text-red-500">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            {shortlist.length === 0 ? (
+              <div className="py-20 text-center text-zinc-500">
+                No players added yet.<br />Click "Add" on promising players.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                {shortlist.map((player, idx) => (
+                  <div key={player.id} className="bg-zinc-800 rounded-2xl p-4 flex justify-between items-center group">
+                    <div className="flex gap-4 items-center">
+                      <div className="text-3xl">{player.nationality}</div>
+                      <div>
+                        <div className="font-medium">{player.name}</div>
+                        <div className="text-emerald-400 font-mono text-sm">{player.valueScore} Value Score</div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => removeFromShortlist(player.id)}
+                      className="opacity-40 group-hover:opacity-100 text-zinc-400 hover:text-red-400 transition"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {shortlist.length > 0 && (
+              <button className="mt-8 w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3">
+                <Download className="w-5 h-5" />
+                Export Shortlist
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

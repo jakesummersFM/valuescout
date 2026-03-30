@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle, X, Eye, BarChart3 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -11,51 +11,113 @@ interface Player {
   name: string;
   nationality: string;
   age: number;
+  position: string;
+  league: string;
   valueScore: number;
   keyStat: string;
   transferValue: string;
   wage: string;
-  rawData?: any; // Store original row for future advanced calculations
+  rawData: any;
+  badge: { type: 'gem' | 'overpriced' | 'overrated' | 'avoid' | 'none'; label: string; icon: string };
 }
 
-const positions = ['Attackers', 'Midfielders', 'Defenders', 'Goalkeepers'];
+const positionFilters = [
+  { label: 'All Positions', value: 'All' },
+  { label: 'Goalkeeper', value: 'GK' },
+  { label: 'Wing-Back', value: 'Wing Back' },
+  { label: 'Central Defender', value: 'Central Defender' },
+  { label: 'Centre Mid', value: 'Centre Mid' },
+  { label: 'Attacking Mid', value: 'Attacking Mid' },
+  { label: 'Winger', value: 'Winger' },
+  { label: 'Striker', value: 'Striker' },
+];
 
-export default function ValueScout() {
-  const [activePosition, setActivePosition] = useState('Attackers');
+export default function FMValueScoutV2() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
   const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
-  // Simple mock Value Score calculator (replace with your real logic later)
-  const calculateValueScore = (row: any, position: string): number => {
-    // Example logic - customize based on your actual FM CSV columns
+  const getPositionGroup = (pos: string): string => {
+    const p = (pos || '').toLowerCase();
+    if (p.includes('gk')) return 'GK';
+    if (p.includes('wing back') || p.includes('wb') || p.includes('full back')) return 'Wing Back';
+    if (p.includes('dc') || p.includes('central defender') || p.includes('cb')) return 'Central Defender';
+    if (p.includes('dm') || p.includes('defensive mid')) return 'Centre Mid';
+    if (p.includes('cm') || p.includes('centre mid')) return 'Centre Mid';
+    if (p.includes('am') || p.includes('attacking mid')) return 'Attacking Mid';
+    if (p.includes('winger') || p.includes('mr') || p.includes('ml') || p.includes('rw') || p.includes('lw')) return 'Winger';
+    if (p.includes('st') || p.includes('striker') || p.includes('cf')) return 'Striker';
+    return 'Other';
+  };
+
+  const getLeagueMultiplier = (league: string): number => {
+    const l = (league || '').toLowerCase();
+    if (l.includes('premier') || l.includes('bundesliga') || l.includes('la liga') || 
+        l.includes('serie a') || l.includes('ligue 1') || l.includes('champions')) return 1.25;
+    if (l.includes('championship') || l.includes('2. bundesliga') || l.includes('ligue 2')) return 1.10;
+    if (l.includes('league one') || l.includes('league two')) return 0.95;
+    return 1.0;
+  };
+
+  const calculateValueScore = (row: any, position: string, league: string): number => {
+    const getNum = (keys: string[], def = 0) => {
+      for (const key of keys) {
+        const val = row[key] || row[key.toLowerCase()] || row[key.replace(' ', '')];
+        if (val !== undefined) {
+          const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+          if (!isNaN(num)) return num;
+        }
+      }
+      return def;
+    };
+
+    const goals = getNum(['Goals', 'Gls']);
+    const assists = getNum(['Assists', 'Ast']);
+    const xG = getNum(['xG', 'Expected Goals', 'xG/90']);
+    const keyPasses = getNum(['Key Passes', 'KP']);
+    const tackles = getNum(['Tackles', 'Tkl']);
+    const interceptions = getNum(['Interceptions', 'Int']);
+    const savePct = getNum(['Save %', 'Save Percentage', 'Saves %']);
+
     let performance = 0;
-    let costEfficiency = 0;
-
-    // Common FM columns you might have
-    const goals = parseFloat(row.Goals) || 0;
-    const assists = parseFloat(row.Assists) || 0;
-    const xG = parseFloat(row['xG']) || parseFloat(row['Expected Goals']) || 0;
-    const value = parseFloat((row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1;
-    const wage = parseFloat((row.Wage || row['Weekly Wage'] || '0').replace(/[^0-9.]/g, '')) || 1;
-
-    if (position === 'Attackers') {
-      performance = (goals * 1.5 + assists + (xG > 0 ? goals / xG * 20 : 0));
-    } else if (position === 'Midfielders') {
-      performance = (assists * 2 + (parseFloat(row.Tackles) || 0) * 0.8 + (parseFloat(row['Key Passes']) || 0));
-    } else if (position === 'Defenders') {
-      performance = (parseFloat(row.Tackles) || 0) * 1.2 + (parseFloat(row.Interceptions) || 0) * 1.5;
-    } else {
-      performance = parseFloat(row['Save %']) || parseFloat(row.Saves) || 50;
+    switch (position) {
+      case 'GK': performance = savePct * 1.8; break;
+      case 'Wing Back': performance = tackles * 1.6 + keyPasses * 1.4 + assists * 1.2; break;
+      case 'Central Defender': performance = tackles * 1.9 + interceptions * 1.7; break;
+      case 'Centre Mid': performance = tackles * 1.5 + keyPasses * 1.6 + assists * 1.4; break;
+      case 'Attacking Mid': performance = assists * 2.0 + keyPasses * 1.8 + goals * 1.2; break;
+      case 'Winger': performance = assists * 1.7 + keyPasses * 1.6 + goals * 1.3; break;
+      case 'Striker': performance = goals * 2.2 + assists * 1.3 + (xG > 0 ? (goals / xG) * 30 : goals * 25); break;
+      default: performance = (goals + assists + tackles + keyPasses) * 1.2;
     }
 
-    costEfficiency = 10000 / (value / 1000000 + wage / 1000); // rough efficiency
+    const leagueMultiplier = getLeagueMultiplier(league);
+    const baseScore = Math.min(85, performance * 1.8);
 
-    const score = Math.min(99, Math.max(40, Math.round(performance * 2 + costEfficiency / 10)));
-    return score;
+    const valueM = Math.max(0.1, (getNum(['Transfer Value', 'Value']) || 1000000) / 1000000);
+    const wageK = Math.max(1, (getNum(['Wage', 'Weekly Wage']) || 1000) / 1000);
+    const efficiency = Math.min(25, Math.max(5, 45 / (valueM * 0.7 + wageK * 0.3)));
+
+    const age = parseInt(row.Age) || 25;
+    const ageBonus = age <= 21 ? 14 : age <= 23 ? 10 : age <= 26 ? 6 : age >= 32 ? -4 : 0;
+
+    let finalScore = (baseScore * 0.65) + (efficiency * 0.25) + ageBonus;
+    finalScore *= leagueMultiplier;
+
+    return Math.max(40, Math.min(99, Math.round(finalScore)));
+  };
+
+  const calculateBadge = (score: number, valueM: number, age: number): Player['badge'] => {
+    if (score >= 92 && (age <= 23 || valueM <= 15)) return { type: 'gem', label: 'Hidden Gem', icon: '💎' };
+    if (score < 55 && valueM > 30) return { type: 'avoid', label: "Don't Touch", icon: '🚫' };
+    if (score >= 78 && valueM > 45) return { type: 'overpriced', label: 'Overpriced', icon: '⚠️' };
+    if (score < 68 && valueM < 10) return { type: 'overrated', label: 'Overrated', icon: '🔥' };
+    return { type: 'none', label: '', icon: '' };
   };
 
   const parseAndProcessCSV = useCallback((file: File) => {
@@ -67,94 +129,66 @@ export default function ValueScout() {
       skipEmptyLines: true,
       complete: (results) => {
         if (results.data.length === 0) {
-          setUploadMessage({ type: 'error', text: 'CSV appears to be empty.' });
+          setUploadMessage({ type: 'error', text: 'CSV is empty' });
           setIsProcessing(false);
           return;
         }
 
         const parsedPlayers: Player[] = results.data
           .map((row: any, index: number) => {
-            const name = row.Name || row.Player || 'Unknown Player';
-            const nationality = row.Nationality || row.Nat || '🇬🇧';
+            const rawPos = row.Position || row.Pos || 'Other';
+            const group = getPositionGroup(rawPos);
+            const league = row.League || row.Competition || row.Division || '';
+            const score = calculateValueScore(row, group, league);
+            const valueM = Math.max(0.1, (parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1000000) / 1000000);
             const age = parseInt(row.Age) || 25;
-
-            const valueScore = calculateValueScore(row, activePosition);
-
-            let keyStat = 'N/A';
-            if (activePosition === 'Attackers') {
-              keyStat = `Goals/xG: ${(parseFloat(row.Goals) || 0).toFixed(1)}`;
-            } else if (activePosition === 'Midfielders') {
-              keyStat = `Assists: ${row.Assists || row['Key Passes'] || 'N/A'}`;
-            } else if (activePosition === 'Defenders') {
-              keyStat = `Tackles: ${row.Tackles || 'N/A'}`;
-            } else {
-              keyStat = `Save%: ${row['Save %'] || 'N/A'}`;
-            }
+            const badge = calculateBadge(score, valueM, age);
 
             return {
               id: Date.now() + index,
               rank: index + 1,
-              name,
-              nationality: nationality.length > 3 ? '🌍' : nationality,
+              name: row.Name || row.Player || 'Unknown Player',
+              nationality: row.Nationality || row.Nat || '🌍',
               age,
-              valueScore,
-              keyStat,
+              position: group,
+              league,
+              valueScore: score,
+              keyStat: group === 'Striker' ? `xG: ${row['xG'] || '-'}` : group === 'GK' ? `Save%: ${row['Save %'] || '-'}` : `Key: ${row.Goals || row.Assists || row.Tackles || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
               wage: row.Wage || row['Weekly Wage'] || '£0',
               rawData: row,
+              badge,
             };
           })
-          .sort((a, b) => b.valueScore - a.valueScore) // Initial sort by score
-          .map((player, idx) => ({ ...player, rank: idx + 1 }));
+          .sort((a, b) => b.valueScore - a.valueScore)
+          .map((p, i) => ({ ...p, rank: i + 1 }));
 
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Successfully loaded ${parsedPlayers.length} ${activePosition.toLowerCase()}!` 
+          text: `Loaded ${parsedPlayers.length} players! League difficulty & stats used for scoring.` 
         });
         setIsProcessing(false);
       },
-      error: (error) => {
-        setUploadMessage({ type: 'error', text: `Parse error: ${error.message}` });
+      error: () => {
+        setUploadMessage({ type: 'error', text: 'Failed to parse CSV' });
         setIsProcessing(false);
       }
     });
-  }, [activePosition]);
+  }, []);
 
   const handleFileUpload = (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setUploadMessage({ type: 'error', text: 'Please upload a CSV file only.' });
+      setUploadMessage({ type: 'error', text: 'Please upload a CSV file' });
       return;
     }
     parseAndProcessCSV(file);
   };
 
-  // Drag & Drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
+  const filteredPlayers = selectedPositionFilter === 'All' 
+    ? players 
+    : players.filter(p => p.position === selectedPositionFilter);
 
-  const handleDragLeave = () => setIsDragging(false);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileUpload(file);
-  };
-
-  const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) {
-      setShortlist([...shortlist, player]);
-    }
-  };
-
-  const removeFromShortlist = (id: number) => {
-    setShortlist(shortlist.filter(p => p.id !== id));
-  };
-
-  // Table columns (same as before, slightly improved)
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
     {
@@ -164,8 +198,8 @@ export default function ValueScout() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">{row.original.nationality}</span>
           <div>
-            <div className="font-semibold text-white">{row.original.name}</div>
-            <div className="text-xs text-zinc-500">Age {row.original.age}</div>
+            <div className="font-semibold">{row.original.name}</div>
+            <div className="text-xs text-zinc-500">{row.original.position} • {row.original.league}</div>
           </div>
         </div>
       ),
@@ -176,17 +210,15 @@ export default function ValueScout() {
       cell: ({ row }: any) => {
         const score = row.original.valueScore;
         const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-amber-500' : 'bg-orange-500';
+        const badge = row.original.badge;
         return (
-          <div className="flex items-center gap-3 min-w-[140px]">
+          <div className="flex items-center gap-3">
             <div className="flex-1 h-3 bg-zinc-800 rounded-full overflow-hidden">
-              <div 
-                className={`h-full ${color} transition-all duration-500`} 
-                style={{ width: `${score}%` }}
-              />
+              <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
             </div>
-            <div className="font-mono font-bold text-lg w-12 text-right flex items-center gap-1">
+            <div className="flex items-center gap-1 font-mono font-bold text-lg">
               {score}
-              {score >= 92 && <Diamond className="text-emerald-400 w-5 h-5" />}
+              {badge.icon && <span className="text-xl ml-1" title={badge.label}>{badge.icon}</span>}
             </div>
           </div>
         );
@@ -199,19 +231,27 @@ export default function ValueScout() {
       id: 'actions',
       header: '',
       cell: ({ row }: any) => (
-        <button
-          onClick={() => addToShortlist(row.original)}
-          disabled={shortlist.some(p => p.id === row.original.id)}
-          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 rounded-xl text-sm flex items-center gap-2 transition font-medium"
-        >
-          <Plus className="w-4 h-4" /> Add
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setSelectedPlayer(row.original)}
+            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm flex items-center gap-2 transition"
+          >
+            <Eye className="w-4 h-4" /> Stats
+          </button>
+          <button 
+            onClick={() => addToShortlist(row.original)}
+            disabled={shortlist.some(p => p.id === row.original.id)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2 transition"
+          >
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
       ),
     },
   ], [shortlist]);
 
   const table = useReactTable({
-    data: players,
+    data: filteredPlayers,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -219,114 +259,102 @@ export default function ValueScout() {
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const addToShortlist = (player: Player) => {
+    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
+  };
+
+  const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
+
+  const clearShortlist = () => setShortlist([]);
+
+  const exportShortlist = () => {
+    if (shortlist.length === 0) return;
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "fm-value-scout-shortlist.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Navbar remains the same as previous version */}
-
       <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center text-black font-bold text-2xl">⚽</div>
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
             <div>
-              <div className="text-2xl font-semibold tracking-tight">Value Scout</div>
-              <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager</div>
+              <div className="text-3xl font-bold tracking-tight">FM Value Scout</div>
+              <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager • V2</div>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 px-4 py-2 hover:bg-zinc-900 rounded-xl transition text-sm">
-              <Users className="w-4 h-4" /> How to Export
-            </button>
-            {shortlist.length > 0 && (
-              <button className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-xl flex items-center gap-2 font-medium">
-                <Download className="w-4 h-4" /> Export Shortlist
-              </button>
-            )}
-          </div>
+          <button 
+            onClick={exportShortlist}
+            disabled={shortlist.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
+          >
+            <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
+          </button>
         </div>
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8">
-        {/* Main Content */}
-        <div className="flex-1 space-y-8">
-          {/* Upload Section */}
-          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
-            <h2 className="text-2xl font-semibold mb-2">Upload Scouting Data</h2>
-            <p className="text-zinc-400 mb-6">One position group only • CSV from FM Player Search</p>
-
-            {/* Position Tabs */}
-            <div className="flex gap-2 mb-8 flex-wrap">
-              {positions.map((pos) => (
+        {/* Position Filters */}
+        <div className="w-64 flex-shrink-0">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
+            <h3 className="font-semibold mb-4 text-lg">Filter by Position</h3>
+            <div className="space-y-2">
+              {positionFilters.map((filter) => (
                 <button
-                  key={pos}
-                  onClick={() => {
-                    setActivePosition(pos);
-                    setPlayers([]); // Clear previous results when switching
-                    setUploadMessage(null);
-                  }}
-                  className={`px-8 py-3 rounded-2xl font-medium transition-all ${
-                    activePosition === pos 
-                      ? 'bg-emerald-500 text-black shadow-lg' 
-                      : 'bg-zinc-800 hover:bg-zinc-700'
+                  key={filter.value}
+                  onClick={() => setSelectedPositionFilter(filter.value)}
+                  className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${
+                    selectedPositionFilter === filter.value ? 'bg-emerald-500 text-black font-medium' : 'bg-zinc-800 hover:bg-zinc-700'
                   }`}
                 >
-                  {pos}
+                  {filter.label}
                 </button>
               ))}
             </div>
+          </div>
+        </div>
 
-            {/* Drag & Drop */}
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-3xl p-20 text-center transition-all ${
-                isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700 hover:border-zinc-500'
-              }`}
-            >
-              <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
-              <p className="text-2xl font-medium mb-3">
-                {isProcessing ? 'Processing CSV...' : 'Drag & Drop your FM CSV here'}
-              </p>
-              <p className="text-zinc-400 mb-8">or click to browse</p>
-
-              <label className="inline-block bg-white hover:bg-zinc-200 text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer transition">
-                Select CSV File
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  className="hidden" 
-                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} 
-                />
-              </label>
-
-              {uploadMessage && (
-                <div className={`mt-6 flex items-center justify-center gap-3 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {uploadMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : null}
-                  {uploadMessage.text}
-                </div>
-              )}
+        {/* Main Content */}
+        <div className="flex-1 space-y-8">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}
+            className={`bg-zinc-900 border-2 border-dashed ${isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700'} rounded-3xl p-12 text-center transition-all`}
+          >
+            <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
+            <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+            <div className="text-zinc-400 text-sm max-w-md mx-auto mb-8">
+              Recommended columns: Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
-
-            <div className="text-center text-xs text-zinc-500 mt-6">
-              Tip: In FM, go to Player Search → customize columns → Ctrl + P → Web Page → Save as CSV
-            </div>
+            <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
+              Choose CSV File
+              <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
+            </label>
+            {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>{uploadMessage.text}</div>}
           </div>
 
-          {/* Players Table */}
           {players.length > 0 && (
             <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
-              <div className="px-8 py-5 border-b border-zinc-700 flex justify-between">
+              <div className="px-8 py-6 border-b border-zinc-700">
                 <h3 className="text-xl font-semibold">
-                  {activePosition} • {players.length} players ranked by Value Score
+                  {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
                 </h3>
               </div>
-
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    {table.getHeaderGroups().map((headerGroup: any) => (
+                    {table.getHeaderGroups().map(headerGroup => (
                       <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
-                        {headerGroup.headers.map((header: any) => (
+                        {headerGroup.headers.map(header => (
                           <th 
                             key={header.id}
                             onClick={header.column.getToggleSortingHandler()}
@@ -339,9 +367,9 @@ export default function ValueScout() {
                     ))}
                   </thead>
                   <tbody>
-                    {table.getRowModel().rows.map((row: any) => (
+                    {table.getRowModel().rows.map(row => (
                       <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
-                        {row.getVisibleCells().map((cell: any) => (
+                        {row.getVisibleCells().map(cell => (
                           <td key={cell.id} className="px-8 py-6">
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>
@@ -355,62 +383,121 @@ export default function ValueScout() {
           )}
         </div>
 
-        {/* Shortlist Sidebar - same as before */}
-        <div className="w-96 flex-shrink-0">
+        {/* Shortlist */}
+        <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
-            {/* Shortlist content - unchanged from previous version */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3">
-                <div className="bg-emerald-500/10 p-3 rounded-2xl">
-                  <Users className="w-6 h-6 text-emerald-400" />
-                </div>
+                <Users className="w-6 h-6 text-emerald-400" />
                 <div>
-                  <div className="font-semibold text-lg">Shortlist</div>
-                  <div className="text-xs text-zinc-500">{shortlist.length} selected</div>
+                  <div className="font-semibold">Shortlist</div>
+                  <div className="text-xs text-zinc-500">{shortlist.length} players</div>
                 </div>
               </div>
-              {shortlist.length > 0 && (
-                <button onClick={() => setShortlist([])} className="text-red-400 hover:text-red-500">
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              )}
+              {shortlist.length > 0 && <button onClick={clearShortlist} className="text-red-400 hover:text-red-500 text-sm">Clear</button>}
             </div>
 
             {shortlist.length === 0 ? (
-              <div className="py-20 text-center text-zinc-500">
-                No players added yet.<br />Click "Add" on promising players.
-              </div>
+              <div className="text-center py-16 text-zinc-500">Add players from the table</div>
             ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                {shortlist.map((player, idx) => (
-                  <div key={player.id} className="bg-zinc-800 rounded-2xl p-4 flex justify-between items-center group">
-                    <div className="flex gap-4 items-center">
-                      <div className="text-3xl">{player.nationality}</div>
-                      <div>
-                        <div className="font-medium">{player.name}</div>
-                        <div className="text-emerald-400 font-mono text-sm">{player.valueScore} Value Score</div>
-                      </div>
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {shortlist.map(player => (
+                  <div key={player.id} className="bg-zinc-800 rounded-2xl p-4 flex justify-between items-center">
+                    <div>
+                      <div className="font-medium">{player.name}</div>
+                      <div className="text-emerald-400 text-sm">{player.valueScore} • {player.position}</div>
                     </div>
-                    <button 
-                      onClick={() => removeFromShortlist(player.id)}
-                      className="opacity-40 group-hover:opacity-100 text-zinc-400 hover:text-red-400 transition"
-                    >
+                    <button onClick={() => removeFromShortlist(player.id)} className="text-zinc-400 hover:text-red-400">
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
                 ))}
               </div>
             )}
-
-            {shortlist.length > 0 && (
-              <button className="mt-8 w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3">
-                <Download className="w-5 h-5" />
-                Export Shortlist
-              </button>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Player Modal with Bar Charts */}
+      {selectedPlayer && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-8 border-b border-zinc-700 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <span className="text-5xl">{selectedPlayer.nationality}</span>
+                <div>
+                  <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
+                  <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="p-8 flex-1 overflow-auto">
+              <div className="text-center mb-10">
+                <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
+                <div className="text-xl text-zinc-400">Value Score</div>
+                {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
+              </div>
+
+              {/* Bar Charts */}
+              <div className="space-y-8 mb-12">
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Performance (Stats)</span>
+                    <span className="font-mono text-emerald-400">70%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500" style={{ width: '70%' }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Value for Money</span>
+                    <span className="font-mono text-amber-400">65%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500" style={{ width: '65%' }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Age Factor</span>
+                    <span className="font-mono text-purple-400">45%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-500" style={{ width: '45%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* All Exported Stats */}
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" /> All Exported Stats
+              </h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
+                  <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
+                    <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
+                    <div className="font-medium mt-1 break-all">{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-8 border-t border-zinc-700">
+              <button 
+                onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3"
+              >
+                <Plus className="w-5 h-5" /> Add to Shortlist
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

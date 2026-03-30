@@ -2,8 +2,8 @@
 
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle, X, Eye, BarChart3, Heart } from 'lucide-react';
-import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart } from 'lucide-react';
+import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender, Row } from '@tanstack/react-table';
 
 interface Player {
   id: number;
@@ -17,7 +17,7 @@ interface Player {
   keyStat: string;
   transferValue: string;
   wage: string;
-  rawData: any;
+  rawData: Record<string, unknown>;
   badge: { type: 'gem' | 'overpriced' | 'overrated' | 'avoid' | 'none'; label: string; icon: string };
 }
 
@@ -38,7 +38,6 @@ export default function FMValueScoutV2() {
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
   const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
   const [isDragging, setIsDragging] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
@@ -64,7 +63,7 @@ export default function FMValueScoutV2() {
     return 1.0;
   };
 
-  const calculateValueScore = (row: any, position: string, league: string): number => {
+  const calculateValueScore = (row: Record<string, string | number | undefined>, position: string, league: string): number => {
     const getNum = (keys: string[], def = 0) => {
       for (const key of keys) {
         const val = row[key] || row[key.toLowerCase()] || row[key.replace(' ', '')];
@@ -97,13 +96,13 @@ export default function FMValueScoutV2() {
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.0;
+    const baseScore = performance * 2.0;
 
     const valueM = Math.max(0.1, (getNum(['Transfer Value', 'Value']) || 1000000) / 1000000);
     const wageK = Math.max(1, (getNum(['Wage', 'Weekly Wage']) || 1000) / 1000);
     const efficiency = Math.min(30, Math.max(8, 55 / (valueM * 0.65 + wageK * 0.35)));
 
-    const age = parseInt(row.Age) || 25;
+    const age = parseInt(String(row.Age)) || 25;
     const ageBonus = age <= 21 ? 16 : age <= 23 ? 11 : age <= 26 ? 7 : age >= 32 ? -5 : 0;
 
     let finalScore = (baseScore * 0.60) + (efficiency * 0.28) + ageBonus;
@@ -121,7 +120,6 @@ export default function FMValueScoutV2() {
   };
 
   const parseAndProcessCSV = useCallback((file: File) => {
-    setIsProcessing(true);
     setUploadMessage(null);
 
     Papa.parse(file, {
@@ -130,32 +128,31 @@ export default function FMValueScoutV2() {
       complete: (results) => {
         if (results.data.length === 0) {
           setUploadMessage({ type: 'error', text: 'CSV is empty' });
-          setIsProcessing(false);
           return;
         }
 
-        const parsedPlayers: Player[] = results.data
-          .map((row: any, index: number) => {
-            const rawPos = row.Position || row.Pos || 'Other';
+        const parsedPlayers: Player[] = (results.data as Record<string, string | number | undefined>[])
+          .map((row, index: number) => {
+            const rawPos = String(row.Position || row.Pos || 'Other');
             const group = getPositionGroup(rawPos);
-            const league = row.League || row.Competition || row.Division || '';
+            const league = String(row.League || row.Competition || row.Division || '');
             const score = calculateValueScore(row, group, league);
             const valueM = Math.max(0.1, (parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1000000) / 1000000);
-            const age = parseInt(row.Age) || 25;
+            const age = parseInt(String(row.Age)) || 25;
             const badge = calculateBadge(score, valueM, age);
 
             return {
               id: Date.now() + index,
               rank: index + 1,
-              name: row.Name || row.Player || 'Unknown Player',
-              nationality: row.Nationality || row.Nat || '🌍',
+              name: String(row.Name || row.Player || 'Unknown Player'),
+              nationality: String(row.Nationality || row.Nat || '🌍'),
               age,
               position: group,
-              league,
+              league: String(league),
               valueScore: score,
               keyStat: group === 'Striker' ? `xG: ${row['xG'] || '-'}` : group === 'GK' ? `Save%: ${row['Save %'] || '-'}` : `Key: ${row.Goals || row.Assists || row.Tackles || '-'}`,
-              transferValue: row['Transfer Value'] || row.Value || '£0',
-              wage: row.Wage || row['Weekly Wage'] || '£0',
+              transferValue: String(row['Transfer Value'] || row.Value || '£0'),
+              wage: String(row.Wage || row['Weekly Wage'] || '£0'),
               rawData: row,
               badge,
             };
@@ -168,14 +165,12 @@ export default function FMValueScoutV2() {
           type: 'success', 
           text: `Loaded ${parsedPlayers.length} players! League difficulty & stats used for scoring.` 
         });
-        setIsProcessing(false);
       },
       error: () => {
         setUploadMessage({ type: 'error', text: 'Failed to parse CSV' });
-        setIsProcessing(false);
       }
     });
-  }, []);
+  }, [calculateValueScore]);
 
   const handleFileUpload = (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
@@ -189,12 +184,16 @@ export default function FMValueScoutV2() {
     ? players 
     : players.filter(p => p.position === selectedPositionFilter);
 
+  const addToShortlist = useCallback((player: Player) => {
+    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
+  }, [shortlist]);
+
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
     {
       accessorKey: 'name',
       header: 'Player',
-      cell: ({ row }: any) => (
+      cell: ({ row }: { row: Row<Player> }) => (
         <div className="flex items-center gap-3">
           <span className="text-2xl">{row.original.nationality}</span>
           <div>
@@ -207,7 +206,7 @@ export default function FMValueScoutV2() {
     {
       accessorKey: 'valueScore',
       header: 'Value Score',
-      cell: ({ row }: any) => {
+      cell: ({ row }: { row: Row<Player> }) => {
         const score = row.original.valueScore;
         const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-amber-500' : 'bg-orange-500';
         const badge = row.original.badge;
@@ -230,7 +229,7 @@ export default function FMValueScoutV2() {
     {
       id: 'actions',
       header: '',
-      cell: ({ row }: any) => (
+      cell: ({ row }: { row: Row<Player> }) => (
         <div className="flex gap-2">
           <button 
             onClick={() => setSelectedPlayer(row.original)}
@@ -248,7 +247,7 @@ export default function FMValueScoutV2() {
         </div>
       ),
     },
-  ], [shortlist]);
+  ], [shortlist, addToShortlist]);
 
   const table = useReactTable({
     data: filteredPlayers,
@@ -258,10 +257,6 @@ export default function FMValueScoutV2() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-
-  const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
-  };
 
   const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
 

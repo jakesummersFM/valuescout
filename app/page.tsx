@@ -324,6 +324,7 @@ export default function FMValueScoutV2() {
 
         {/* Main Content */}
         <div className="flex-1 space-y-8">
+          {/* Upload Area with Guidance */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -332,14 +333,22 @@ export default function FMValueScoutV2() {
           >
             <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
             <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+            
             <div className="text-zinc-400 text-sm max-w-md mx-auto mb-8">
-              Recommended columns: Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
+              <strong>Recommended columns for best results:</strong><br />
+              Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
+
             <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
               Choose CSV File
               <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
             </label>
-            {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>{uploadMessage.text}</div>}
+
+            {uploadMessage && (
+              <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {uploadMessage.text}
+              </div>
+            )}
           </div>
 
           {players.length > 0 && (
@@ -383,7 +392,7 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
-        {/* Shortlist */}
+        {/* Shortlist Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <div className="flex justify-between items-center mb-6">

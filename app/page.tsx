@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle, X, Eye, BarChart3 } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Diamond, Users, AlertCircle, X, Eye, BarChart3, Heart } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -86,37 +86,37 @@ export default function FMValueScoutV2() {
 
     let performance = 0;
     switch (position) {
-      case 'GK': performance = savePct * 1.8; break;
-      case 'Wing Back': performance = tackles * 1.6 + keyPasses * 1.4 + assists * 1.2; break;
-      case 'Central Defender': performance = tackles * 1.9 + interceptions * 1.7; break;
-      case 'Centre Mid': performance = tackles * 1.5 + keyPasses * 1.6 + assists * 1.4; break;
-      case 'Attacking Mid': performance = assists * 2.0 + keyPasses * 1.8 + goals * 1.2; break;
-      case 'Winger': performance = assists * 1.7 + keyPasses * 1.6 + goals * 1.3; break;
-      case 'Striker': performance = goals * 2.2 + assists * 1.3 + (xG > 0 ? (goals / xG) * 30 : goals * 25); break;
-      default: performance = (goals + assists + tackles + keyPasses) * 1.2;
+      case 'GK': performance = savePct * 2.2; break;
+      case 'Wing Back': performance = (tackles * 1.8) + (keyPasses * 1.6) + (assists * 1.4); break;
+      case 'Central Defender': performance = (tackles * 2.1) + (interceptions * 1.9); break;
+      case 'Centre Mid': performance = (tackles * 1.7) + (keyPasses * 1.8) + (assists * 1.5); break;
+      case 'Attacking Mid': performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.4); break;
+      case 'Winger': performance = (assists * 1.9) + (keyPasses * 1.8) + (goals * 1.5); break;
+      case 'Striker': performance = (goals * 2.5) + (assists * 1.6) + (xG > 0 ? (goals / xG) * 35 : goals * 28); break;
+      default: performance = (goals + assists + tackles + keyPasses) * 1.5;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    const baseScore = Math.min(85, performance * 1.8);
+    let baseScore = performance * 2.0;
 
     const valueM = Math.max(0.1, (getNum(['Transfer Value', 'Value']) || 1000000) / 1000000);
     const wageK = Math.max(1, (getNum(['Wage', 'Weekly Wage']) || 1000) / 1000);
-    const efficiency = Math.min(25, Math.max(5, 45 / (valueM * 0.7 + wageK * 0.3)));
+    const efficiency = Math.min(30, Math.max(8, 55 / (valueM * 0.65 + wageK * 0.35)));
 
     const age = parseInt(row.Age) || 25;
-    const ageBonus = age <= 21 ? 14 : age <= 23 ? 10 : age <= 26 ? 6 : age >= 32 ? -4 : 0;
+    const ageBonus = age <= 21 ? 16 : age <= 23 ? 11 : age <= 26 ? 7 : age >= 32 ? -5 : 0;
 
-    let finalScore = (baseScore * 0.65) + (efficiency * 0.25) + ageBonus;
+    let finalScore = (baseScore * 0.60) + (efficiency * 0.28) + ageBonus;
     finalScore *= leagueMultiplier;
 
-    return Math.max(40, Math.min(99, Math.round(finalScore)));
+    return Math.max(42, Math.min(99, Math.round(finalScore)));
   };
 
   const calculateBadge = (score: number, valueM: number, age: number): Player['badge'] => {
     if (score >= 92 && (age <= 23 || valueM <= 15)) return { type: 'gem', label: 'Hidden Gem', icon: '💎' };
-    if (score < 55 && valueM > 30) return { type: 'avoid', label: "Don't Touch", icon: '🚫' };
-    if (score >= 78 && valueM > 45) return { type: 'overpriced', label: 'Overpriced', icon: '⚠️' };
-    if (score < 68 && valueM < 10) return { type: 'overrated', label: 'Overrated', icon: '🔥' };
+    if (score < 58 && valueM > 30) return { type: 'avoid', label: "Don't Touch", icon: '🚫' };
+    if (score >= 80 && valueM > 45) return { type: 'overpriced', label: 'Overpriced', icon: '⚠️' };
+    if (score < 70 && valueM < 12) return { type: 'overrated', label: 'Overrated', icon: '🔥' };
     return { type: 'none', label: '', icon: '' };
   };
 
@@ -281,7 +281,7 @@ export default function FMValueScoutV2() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -291,17 +291,25 @@ export default function FMValueScoutV2() {
               <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager • V2</div>
             </div>
           </div>
-          <button 
-            onClick={exportShortlist}
-            disabled={shortlist.length === 0}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
-          >
-            <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => window.open('https://ko-fi.com/yourusername', '_blank')} // Replace with your actual support link
+              className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition"
+            >
+              <Heart className="w-4 h-4 text-red-400" /> Support the Tool
+            </button>
+            <button 
+              onClick={exportShortlist}
+              disabled={shortlist.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
+            >
+              <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
+            </button>
+          </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8">
+      <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
         {/* Position Filters */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
@@ -334,10 +342,21 @@ export default function FMValueScoutV2() {
             <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
             <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
             
-            <div className="text-zinc-400 text-sm max-w-md mx-auto mb-8">
+            <div className="text-zinc-400 text-sm max-w-md mx-auto mb-6">
               <strong>Recommended columns for best results:</strong><br />
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
+
+            {/* How to Export Perfect CSV Section */}
+            <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto">
+              <summary className="cursor-pointer hover:text-emerald-400 font-medium mb-2">How to Export Perfect CSV from FM</summary>
+              <ol className="list-decimal pl-5 space-y-1 text-xs">
+                <li>Open Player Search in FM</li>
+                <li>Right-click column headers → Customize View</li>
+                <li>Add: Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League</li>
+                <li>Click File → Print Screen → Web Page → Save as CSV</li>
+              </ol>
+            </details>
 
             <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
               Choose CSV File
@@ -392,7 +411,7 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
-        {/* Shortlist Sidebar */}
+        {/* Shortlist */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <div className="flex justify-between items-center mb-6">
@@ -426,6 +445,19 @@ export default function FMValueScoutV2() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
+        <div className="max-w-7xl mx-auto px-6">
+          Made with ❤️ for the Football Manager community • 
+          <button 
+            onClick={() => window.open('https://ko-fi.com/yourusername', '_blank')} 
+            className="hover:text-emerald-400 ml-1 underline"
+          >
+            Support the Tool
+          </button>
+        </div>
+      </footer>
 
       {/* Player Modal with Bar Charts */}
       {selectedPlayer && (

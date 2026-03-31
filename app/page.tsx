@@ -106,23 +106,24 @@ export default function FMValueScoutV2() {
         performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.8);
         break;
       case 'Striker':
-        performance = (goals * 3.0) + (assists * 1.8) + (xG > 0 ? (goals / xG) * 40 : goals * 32);
+        // Improved tuning for your lower-league striker data
+        performance = (goals * 3.5) + (assists * 1.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35);
         break;
       default:
         performance = (goals + assists + tackles + keyPasses) * 1.8;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.2;
+    let baseScore = performance * 2.3;
 
     const valueM = Math.max(0.1, (getNum(['Transfer Value', 'Value']) || 1000000) / 1000000);
     const wageK = Math.max(1, (getNum(['Wage', 'Weekly Wage']) || 1000) / 1000);
-    const efficiency = Math.min(32, Math.max(10, 60 / (valueM * 0.6 + wageK * 0.4)));
+    const efficiency = Math.min(34, Math.max(12, 65 / (valueM * 0.55 + wageK * 0.45)));
 
     const age = parseInt(row.Age) || 25;
     const ageBonus = age <= 21 ? 18 : age <= 23 ? 12 : age <= 26 ? 8 : age >= 32 ? -6 : 0;
 
-    let finalScore = (baseScore * 0.58) + (efficiency * 0.30) + ageBonus;
+    let finalScore = (baseScore * 0.57) + (efficiency * 0.31) + ageBonus;
     finalScore *= leagueMultiplier;
 
     return Math.max(45, Math.min(99, Math.round(finalScore)));
@@ -348,7 +349,6 @@ export default function FMValueScoutV2() {
 
         {/* Main Content */}
         <div className="flex-1 space-y-8">
-          {/* Upload Area */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -363,7 +363,6 @@ export default function FMValueScoutV2() {
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
 
-            {/* How to Export Perfect CSV Section */}
             <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
               <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM</summary>
               <ol className="list-decimal pl-5 space-y-1 text-xs mt-3">
@@ -427,7 +426,7 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
-        {/* Shortlist Sidebar */}
+        {/* Shortlist */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <div className="flex justify-between items-center mb-6">
@@ -462,7 +461,7 @@ export default function FMValueScoutV2() {
         </div>
       </div>
 
-      {/* Footer with Ko-fi */}
+      {/* Footer */}
       <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
         <div className="max-w-7xl mx-auto px-6">
           Made with ❤️ for the Football Manager community • 
@@ -475,7 +474,7 @@ export default function FMValueScoutV2() {
         </div>
       </footer>
 
-      {/* Player Modal with Bar Charts */}
+      {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
@@ -499,7 +498,6 @@ export default function FMValueScoutV2() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
-              {/* Bar Charts */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm">
@@ -530,7 +528,6 @@ export default function FMValueScoutV2() {
                 </div>
               </div>
 
-              {/* All Exported Stats */}
               <h3 className="font-semibold mb-4 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" /> All Exported Stats
               </h3>

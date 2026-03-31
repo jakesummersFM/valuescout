@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Settings } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -83,6 +83,7 @@ export default function FMValueScoutV2() {
     const tackles = getNum(['Tackles', 'Tkl']);
     const interceptions = getNum(['Interceptions', 'Int']);
     const savePct = getNum(['Save %', 'Save Percentage', 'Saves %']);
+    const shots = getNum(['Shots', 'Total Shots']);
 
     let performance = 0;
 
@@ -100,13 +101,13 @@ export default function FMValueScoutV2() {
         performance = (tackles * 2.0) + (keyPasses * 2.1) + (assists * 1.7);
         break;
       case 'Attacking Mid':
-        performance = (assists * 2.5) + (keyPasses * 2.3) + (goals * 1.6);
+        performance = (assists * 2.5) + (keyPasses * 2.3) + (goals * 1.6) + (shots * 0.4);
         break;
       case 'Winger':
-        performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.8);
+        performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.8) + (shots * 0.5);
         break;
       case 'Striker':
-        performance = (goals * 3.5) + (assists * 1.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35);
+        performance = (goals * 3.5) + (assists * 1.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35) + (shots * 0.6);
         break;
       default:
         performance = (goals + assists + tackles + keyPasses) * 1.8;
@@ -169,7 +170,9 @@ export default function FMValueScoutV2() {
               position: group,
               league,
               valueScore: score,
-              keyStat: group === 'Striker' ? `xG: ${row['xG'] || '-'}` : group === 'GK' ? `Save%: ${row['Save %'] || '-'}` : `Key: ${row.Goals || row.Assists || row.Tackles || '-'}`,
+              keyStat: group === 'Striker' ? `xG: ${row['xG'] || '-'} | Shots: ${row['Shots'] || '-'}` : 
+                       group === 'GK' ? `Save%: ${row['Save %'] || '-'}` : 
+                       `Key: ${row.Goals || row.Assists || row.Tackles || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
               wage: row.Wage || row['Weekly Wage'] || '£0',
               rawData: row,
@@ -363,17 +366,17 @@ export default function FMValueScoutV2() {
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
 
-            {/* Improved How to Export Section with Position-Specific Advice */}
+            {/* Updated How to Export Section */}
             <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
               <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
               <div className="mt-3 text-xs space-y-4">
-                <p><strong>Pro Tip:</strong> Single-position exports work best (e.g. only Strikers, only Defenders).</p>
+                <p><strong>Pro Tip:</strong> Single-position exports work best for cleaner rankings.</p>
                 
                 <div>
                   <strong>Recommended columns by position:</strong>
                   <ul className="list-disc pl-5 mt-2 space-y-1">
-                    <li><strong>Striker:</strong> Goals, xG, Assists</li>
-                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes</li>
+                    <li><strong>Striker:</strong> Goals, xG, Assists, Shots</li>
+                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes, Shots</li>
                     <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists</li>
                     <li><strong>Wing-Back:</strong> Tackles, Key Passes, Assists</li>
                     <li><strong>Central Defender:</strong> Tackles, Interceptions</li>
@@ -381,7 +384,7 @@ export default function FMValueScoutV2() {
                   </ul>
                 </div>
                 
-                <p><strong>Always include for every export:</strong> Name, Position, Age, Value, Wage, League</p>
+                <p><strong>Always include:</strong> Name, Position, Age, Value, Wage, League</p>
                 
                 <p><strong>Export steps:</strong> Player Search → Customize View → Add columns → File → Print Screen → Web Page → Save as CSV</p>
               </div>
@@ -488,7 +491,7 @@ export default function FMValueScoutV2() {
         </div>
       </footer>
 
-      {/* Player Modal with Bar Charts */}
+      {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

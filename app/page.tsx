@@ -106,7 +106,6 @@ export default function FMValueScoutV2() {
         performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.8);
         break;
       case 'Striker':
-        // Improved tuning for your lower-league striker data
         performance = (goals * 3.5) + (assists * 1.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35);
         break;
       default:
@@ -349,6 +348,7 @@ export default function FMValueScoutV2() {
 
         {/* Main Content */}
         <div className="flex-1 space-y-8">
+          {/* Upload Area */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -363,14 +363,28 @@ export default function FMValueScoutV2() {
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
 
+            {/* Improved How to Export Section with Position-Specific Advice */}
             <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
-              <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM</summary>
-              <ol className="list-decimal pl-5 space-y-1 text-xs mt-3">
-                <li>Open Player Search in FM</li>
-                <li>Right-click column headers → Customize View</li>
-                <li>Add recommended columns listed above</li>
-                <li>File → Print Screen → Web Page → Save as CSV</li>
-              </ol>
+              <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
+              <div className="mt-3 text-xs space-y-4">
+                <p><strong>Pro Tip:</strong> Single-position exports work best (e.g. only Strikers, only Defenders).</p>
+                
+                <div>
+                  <strong>Recommended columns by position:</strong>
+                  <ul className="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Striker:</strong> Goals, xG, Assists</li>
+                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes</li>
+                    <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists</li>
+                    <li><strong>Wing-Back:</strong> Tackles, Key Passes, Assists</li>
+                    <li><strong>Central Defender:</strong> Tackles, Interceptions</li>
+                    <li><strong>Goalkeeper:</strong> Save %</li>
+                  </ul>
+                </div>
+                
+                <p><strong>Always include for every export:</strong> Name, Position, Age, Value, Wage, League</p>
+                
+                <p><strong>Export steps:</strong> Player Search → Customize View → Add columns → File → Print Screen → Web Page → Save as CSV</p>
+              </div>
             </details>
 
             <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
@@ -426,7 +440,7 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
-        {/* Shortlist */}
+        {/* Shortlist Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <div className="flex justify-between items-center mb-6">
@@ -474,7 +488,7 @@ export default function FMValueScoutV2() {
         </div>
       </footer>
 
-      {/* Player Modal */}
+      {/* Player Modal with Bar Charts */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

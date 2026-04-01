@@ -216,4 +216,3 @@ export default function FMValueScoutV2() {
 
   // For brevity, paste the entire previous component and only replace the calculateValueScore + calculateBadge + the upload area note below.
 
-  // In the drag-drop upload section, replace the note with this improved version that includes the best-time advice:

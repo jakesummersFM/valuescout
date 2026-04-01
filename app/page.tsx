@@ -99,7 +99,7 @@ export default function FMValueScoutV2() {
         performance = (tackles * 2.9) + (keyPasses * 2.1) + (assists * 1.8);
         break;
       case 'Central Defender':
-        performance = (tackles * 3.6) + (interceptions * 3.3);   // Tuned for thin defender data
+        performance = (tackles * 3.6) + (interceptions * 3.3);
         break;
       case 'Centre Mid':
         performance = (tackles * 2.7) + (keyPasses * 2.5) + (assists * 2.1);
@@ -118,7 +118,7 @@ export default function FMValueScoutV2() {
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.75;   // Increased scaling for better spread on thin data
+    let baseScore = performance * 2.75;
 
     const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
     const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
@@ -212,9 +212,396 @@ export default function FMValueScoutV2() {
     });
   }, []);
 
-  // ... (handleFileUpload, filteredPlayers, columns, table, addToShortlist, removeFromShortlist, exportShortlist, and the full JSX remain exactly the same as the previous full code I sent)
+  const handleFileUpload = (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setUploadMessage({ type: 'error', text: 'Please upload a CSV file' });
+      return;
+    }
+    parseAndProcessCSV(file);
+  };
 
+  const filteredPlayers = useMemo(() => {
+    return selectedPositionFilter === 'All' 
+      ? players 
+      : players.filter(p => p.position === selectedPositionFilter);
+  }, [players, selectedPositionFilter]);
 
-  // ...existing code...
+  const columns = React.useMemo(() => [
+    { accessorKey: 'rank', header: 'Rank' },
+    {
+      accessorKey: 'name',
+      header: 'Player',
+      cell: ({ row }: any) => (
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">{row.original.nationality}</span>
+          <div>
+            <div className="font-semibold">{row.original.name}</div>
+            <div className="text-xs text-zinc-500">{row.original.position} • {row.original.league}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'valueScore',
+      header: 'Value Score',
+      cell: ({ row }: any) => {
+        const score = row.original.valueScore;
+        const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-amber-500' : 'bg-orange-500';
+        const badge = row.original.badge;
+        return (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-3 bg-zinc-800 rounded-full overflow-hidden">
+              <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
+            </div>
+            <div className="flex items-center gap-1 font-mono font-bold text-lg">
+              {score}
+              {badge.icon && <span className="text-xl ml-1" title={badge.label}>{badge.icon}</span>}
+            </div>
+          </div>
+        );
+      },
+    },
+    { accessorKey: 'keyStat', header: 'Key Stat' },
+    { accessorKey: 'transferValue', header: 'Value' },
+    { accessorKey: 'wage', header: 'Wage' },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }: any) => (
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setSelectedPlayer(row.original)}
+            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm flex items-center gap-2 transition"
+          >
+            <Eye className="w-4 h-4" /> Stats
+          </button>
+          <button 
+            onClick={() => addToShortlist(row.original)}
+            disabled={shortlist.some(p => p.id === row.original.id)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2 transition"
+          >
+            <Plus className="w-4 h-4" /> Add
+          </button>
+        </div>
+      ),
+    },
+  ], [shortlist]);
+
+  const table = useReactTable({
+    data: filteredPlayers,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const addToShortlist = (player: Player) => {
+    if (!shortlist.find(p => p.id === player.id)) {
+      setShortlist([...shortlist, player]);
+    }
+  };
+
+  const removeFromShortlist = (id: number) => {
+    setShortlist(shortlist.filter(p => p.id !== id));
+  };
+
+  const clearShortlist = () => setShortlist([]);
+
+  const exportShortlist = () => {
+    if (shortlist.length === 0) return;
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "fm-value-scout-shortlist.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
+            <div>
+              <div className="text-3xl font-bold tracking-tight">FM Value Scout</div>
+              <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager • V2</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition"
+            >
+              <Heart className="w-4 h-4 text-red-400" /> Support
+            </button>
+            <button 
+              onClick={exportShortlist}
+              disabled={shortlist.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
+            >
+              <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
+        {/* Position Filters */}
+        <div className="w-64 flex-shrink-0">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
+            <h3 className="font-semibold mb-4 text-lg">Filter by Position</h3>
+            <div className="space-y-2">
+              {positionFilters.map((filter) => (
+                <button
+                  key={filter.value}
+                  onClick={() => setSelectedPositionFilter(filter.value)}
+                  className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${
+                    selectedPositionFilter === filter.value 
+                      ? 'bg-emerald-500 text-black font-medium' 
+                      : 'bg-zinc-800 hover:bg-zinc-700'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Upload + Table Area */}
+        <div className="flex-1 space-y-8">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { 
+              e.preventDefault(); 
+              setIsDragging(false); 
+              if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); 
+            }}
+            className={`bg-zinc-900 border-2 border-dashed ${isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700'} rounded-3xl p-12 text-center transition-all`}
+          >
+            <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
+            <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+
+            <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
+              <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
+              <div className="mt-3 text-xs space-y-4">
+                <div className="bg-zinc-800 p-4 rounded-2xl">
+                  <strong className="flex items-center gap-2"><Info className="w-4 h-4" /> Best Time to Run Data</strong>
+                  <p className="mt-2">For the widest and most reliable score spread, export your CSV <strong>after at least 20–25 games</strong> (ideally mid-season or end of season). Early-season data (first 10 games) is often too thin and noisy — players look too similar.</p>
+                </div>
+
+                <p><strong>Pro Tip:</strong> Single-position exports work best.</p>
+                
+                <div>
+                  <strong>Recommended columns by position:</strong>
+                  <ul className="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Central Defender / Wing-Back:</strong> Tackles (Tck C), Interceptions (Itc), Minutes</li>
+                    <li><strong>Striker:</strong> Goals, xG, Assists, Shots, Minutes</li>
+                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes, Shots, Minutes</li>
+                    <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists, Minutes</li>
+                    <li><strong>Goalkeeper:</strong> Save %, Minutes</li>
+                  </ul>
+                </div>
+                
+                <p><strong>Always include:</strong> Name, Position, Age, Transfer Value, Wage, League</p>
+              </div>
+            </details>
+
+            <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
+              Choose CSV File
+              <input 
+                type="file" 
+                accept=".csv" 
+                className="hidden" 
+                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} 
+              />
+            </label>
+
+            {uploadMessage && (
+              <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {uploadMessage.text}
+              </div>
+            )}
+          </div>
+
+          {players.length > 0 && (
+            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
+              <div className="px-8 py-6 border-b border-zinc-700">
+                <h3 className="text-xl font-semibold">
+                  {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    {table.getHeaderGroups().map(headerGroup => (
+                      <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
+                        {headerGroup.headers.map(header => (
+                          <th 
+                            key={header.id}
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="px-8 py-5 text-left text-sm font-medium text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                          </th>
+                        ))}
+                      </tr>
+                    ))}
+                  </thead>
+                  <tbody>
+                    {table.getRowModel().rows.map(row => (
+                      <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id} className="px-8 py-6">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Shortlist Sidebar */}
+        <div className="w-80 flex-shrink-0">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center gap-3">
+                <Users className="w-6 h-6 text-emerald-400" />
+                <div>
+                  <div className="font-semibold">Shortlist</div>
+                  <div className="text-xs text-zinc-500">{shortlist.length} players</div>
+                </div>
+              </div>
+              {shortlist.length > 0 && (
+                <button onClick={clearShortlist} className="text-red-400 hover:text-red-500 text-sm">Clear</button>
+              )}
+            </div>
+
+            {shortlist.length === 0 ? (
+              <div className="text-center py-16 text-zinc-500">Add players from the table</div>
+            ) : (
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {shortlist.map(player => (
+                  <div key={player.id} className="bg-zinc-800 rounded-2xl p-4 flex justify-between items-center">
+                    <div>
+                      <div className="font-medium">{player.name}</div>
+                      <div className="text-emerald-400 text-sm">{player.valueScore} • {player.position}</div>
+                    </div>
+                    <button 
+                      onClick={() => removeFromShortlist(player.id)} 
+                      className="text-zinc-400 hover:text-red-400"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
+        <div className="max-w-7xl mx-auto px-6">
+          Made with ❤️ for the Football Manager community • 
+          <button 
+            onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} 
+            className="hover:text-emerald-400 ml-1 underline"
+          >
+            Support the Tool
+          </button>
+        </div>
+      </footer>
+
+      {/* Player Modal */}
+      {selectedPlayer && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-8 border-b border-zinc-700 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <span className="text-5xl">{selectedPlayer.nationality}</span>
+                <div>
+                  <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
+                  <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="p-8 flex-1 overflow-auto">
+              <div className="text-center mb-10">
+                <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
+                <div className="text-xl text-zinc-400">Value Score</div>
+                {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
+              </div>
+
+              <div className="space-y-8 mb-12">
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Performance (Stats)</span>
+                    <span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Value for Money</span>
+                    <span className="font-mono text-amber-400">{selectedPlayer.valuePercent}%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500" style={{ width: `${selectedPlayer.valuePercent}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm">
+                    <span>Age Factor</span>
+                    <span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span>
+                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} />
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" /> All Exported Stats
+              </h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
+                  <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
+                    <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
+                    <div className="font-medium mt-1 break-all">{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-8 border-t border-zinc-700">
+              <button 
+                onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3"
+              >
+                <Plus className="w-5 h-5" /> Add to Shortlist
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
-

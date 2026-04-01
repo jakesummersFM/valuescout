@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -44,6 +44,18 @@ export default function FMValueScoutV2() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [activeTab, setActiveTab] = useState<'upload' | 'filters'>('upload');
+
+  const recommendedColumns: Record<string, string[]> = {
+    'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc', 'Clearances', 'Blocks', 'Aerials Won'],
+    'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Interceptions', 'Key Passes', 'Assists', 'Crosses'],
+    'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Key Passes', 'Assists', 'Passes Completed %'],
+    'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes', 'Shots', 'xG'],
+    'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes', 'Shots', 'Crosses', 'Dribbles'],
+    'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'xG', 'Shots', 'Shots on Target %'],
+    'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Save %', 'Saves', 'Clean Sheets'],
+    'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
+  };
 
   const getPositionGroup = (pos: string): string => {
     const p = (pos || '').toLowerCase();
@@ -90,31 +102,15 @@ export default function FMValueScoutV2() {
     const shots = per90(getNum(['Shots']));
 
     let performance = 0;
-
     switch (position) {
-      case 'GK':
-        performance = savePct * 3.0;
-        break;
-      case 'Wing Back':
-        performance = (tackles * 2.9) + (keyPasses * 2.1) + (assists * 1.8);
-        break;
-      case 'Central Defender':
-        performance = (tackles * 3.6) + (interceptions * 3.3);
-        break;
-      case 'Centre Mid':
-        performance = (tackles * 2.7) + (keyPasses * 2.5) + (assists * 2.1);
-        break;
-      case 'Attacking Mid':
-        performance = (assists * 2.9) + (keyPasses * 2.7) + (goals * 2.1) + (shots * 0.65);
-        break;
-      case 'Winger':
-        performance = (assists * 2.7) + (keyPasses * 2.4) + (goals * 2.3) + (shots * 0.75);
-        break;
-      case 'Striker':
-        performance = (goals * 4.1) + (assists * 2.3) + (xG > 0 ? (goals / xG) * 55 : goals * 42) + (shots * 0.85);
-        break;
-      default:
-        performance = (tackles + interceptions + goals + assists) * 2.6;
+      case 'GK': performance = savePct * 3.0; break;
+      case 'Wing Back': performance = (tackles * 2.9) + (keyPasses * 2.1) + (assists * 1.8); break;
+      case 'Central Defender': performance = (tackles * 3.6) + (interceptions * 3.3); break;
+      case 'Centre Mid': performance = (tackles * 2.7) + (keyPasses * 2.5) + (assists * 2.1); break;
+      case 'Attacking Mid': performance = (assists * 2.9) + (keyPasses * 2.7) + (goals * 2.1) + (shots * 0.65); break;
+      case 'Winger': performance = (assists * 2.7) + (keyPasses * 2.4) + (goals * 2.3) + (shots * 0.75); break;
+      case 'Striker': performance = (goals * 4.1) + (assists * 2.3) + (xG > 0 ? (goals / xG) * 55 : goals * 42) + (shots * 0.85); break;
+      default: performance = (tackles + interceptions + goals + assists) * 2.6;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
@@ -199,10 +195,7 @@ export default function FMValueScoutV2() {
           .map((p, i) => ({ ...p, rank: i + 1 }));
 
         setPlayers(parsedPlayers);
-        setUploadMessage({ 
-          type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! Optimized for thin/early-season defender data.` 
-        });
+        setUploadMessage({ type: 'success', text: `Loaded ${parsedPlayers.length} players!` });
         setIsProcessing(false);
       },
       error: () => {
@@ -297,14 +290,10 @@ export default function FMValueScoutV2() {
   });
 
   const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) {
-      setShortlist([...shortlist, player]);
-    }
+    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
   };
 
-  const removeFromShortlist = (id: number) => {
-    setShortlist(shortlist.filter(p => p.id !== id));
-  };
+  const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
 
   const clearShortlist = () => setShortlist([]);
 
@@ -321,6 +310,23 @@ export default function FMValueScoutV2() {
     document.body.removeChild(link);
   };
 
+  const copyColumns = (position: string) => {
+    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
+    navigator.clipboard.writeText(cols.join(', '));
+    alert(`✅ Copied columns for ${position}`);
+  };
+
+  const downloadColumns = (position: string) => {
+    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
+    const content = `Recommended columns for ${position} (FM Value Scout)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ValueScout-${position.replace(/\s+/g, '-')}-Columns.txt`;
+    link.click();
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
@@ -333,17 +339,10 @@ export default function FMValueScoutV2() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition"
-            >
+            <button onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition">
               <Heart className="w-4 h-4 text-red-400" /> Support
             </button>
-            <button 
-              onClick={exportShortlist}
-              disabled={shortlist.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
-            >
+            <button onClick={exportShortlist} disabled={shortlist.length === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition">
               <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
             </button>
           </div>
@@ -351,20 +350,16 @@ export default function FMValueScoutV2() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
-        {/* Position Filters */}
+        {/* Position Filter Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-lg">Filter by Position</h3>
+            <h3 className="font-semibold mb-4 text-lg">Filter Results</h3>
             <div className="space-y-2">
               {positionFilters.map((filter) => (
                 <button
                   key={filter.value}
                   onClick={() => setSelectedPositionFilter(filter.value)}
-                  className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${
-                    selectedPositionFilter === filter.value 
-                      ? 'bg-emerald-500 text-black font-medium' 
-                      : 'bg-zinc-800 hover:bg-zinc-700'
-                  }`}
+                  className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${selectedPositionFilter === filter.value ? 'bg-emerald-500 text-black font-medium' : 'bg-zinc-800 hover:bg-zinc-700'}`}
                 >
                   {filter.label}
                 </button>
@@ -373,99 +368,101 @@ export default function FMValueScoutV2() {
           </div>
         </div>
 
-        {/* Main Upload + Table Area */}
+        {/* Main Content with Tabs */}
         <div className="flex-1 space-y-8">
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={(e) => { 
-              e.preventDefault(); 
-              setIsDragging(false); 
-              if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); 
-            }}
-            className={`bg-zinc-900 border-2 border-dashed ${isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700'} rounded-3xl p-12 text-center transition-all`}
-          >
-            <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
-            <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
-
-            <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
-              <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
-              <div className="mt-3 text-xs space-y-4">
-                <div className="bg-zinc-800 p-4 rounded-2xl">
-                  <strong className="flex items-center gap-2"><Info className="w-4 h-4" /> Best Time to Run Data</strong>
-                  <p className="mt-2">For the widest and most reliable score spread, export your CSV <strong>after at least 20–25 games</strong> (ideally mid-season or end of season). Early-season data (first 10 games) is often too thin and noisy — players look too similar.</p>
-                </div>
-
-                <p><strong>Pro Tip:</strong> Single-position exports work best.</p>
-                
-                <div>
-                  <strong>Recommended columns by position:</strong>
-                  <ul className="list-disc pl-5 mt-2 space-y-1">
-                    <li><strong>Central Defender / Wing-Back:</strong> Tackles (Tck C), Interceptions (Itc), Minutes</li>
-                    <li><strong>Striker:</strong> Goals, xG, Assists, Shots, Minutes</li>
-                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes, Shots, Minutes</li>
-                    <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists, Minutes</li>
-                    <li><strong>Goalkeeper:</strong> Save %, Minutes</li>
-                  </ul>
-                </div>
-                
-                <p><strong>Always include:</strong> Name, Position, Age, Transfer Value, Wage, League</p>
-              </div>
-            </details>
-
-            <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
-              Choose CSV File
-              <input 
-                type="file" 
-                accept=".csv" 
-                className="hidden" 
-                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} 
-              />
-            </label>
-
-            {uploadMessage && (
-              <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {uploadMessage.text}
-              </div>
-            )}
+          <div className="flex border-b border-zinc-700">
+            <button onClick={() => setActiveTab('upload')} className={`px-8 py-4 font-medium transition ${activeTab === 'upload' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'}`}>Upload CSV</button>
+            <button onClick={() => setActiveTab('filters')} className={`px-8 py-4 font-medium transition ${activeTab === 'filters' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'}`}>Downloadable Filters</button>
           </div>
 
-          {players.length > 0 && (
-            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden">
-              <div className="px-8 py-6 border-b border-zinc-700">
-                <h3 className="text-xl font-semibold">
-                  {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
-                </h3>
+          {/* Upload Tab */}
+          {activeTab === 'upload' && (
+            <div>
+              <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }} className={`bg-zinc-900 border-2 border-dashed ${isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700'} rounded-3xl p-12 text-center transition-all`}>
+                <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
+                <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+
+                <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
+                  <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV</summary>
+                  <div className="mt-3 text-xs space-y-4">
+                    <div className="bg-zinc-800 p-4 rounded-2xl">
+                      <strong>Best Time to Run Data:</strong> Export after at least 20–25 games (ideally mid or end of season) for reliable spread.
+                    </div>
+                    <p><strong>Pro Tip:</strong> Filter to **one position** before exporting for best results.</p>
+                  </div>
+                </details>
+
+                <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
+                  Choose CSV File
+                  <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
+                </label>
+
+                {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>{uploadMessage.text}</div>}
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    {table.getHeaderGroups().map(headerGroup => (
-                      <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
-                        {headerGroup.headers.map(header => (
-                          <th 
-                            key={header.id}
-                            onClick={header.column.getToggleSortingHandler()}
-                            className="px-8 py-5 text-left text-sm font-medium text-zinc-400 hover:text-white cursor-pointer"
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                          </th>
+
+              {players.length > 0 && (
+                <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden mt-8">
+                  <div className="px-8 py-6 border-b border-zinc-700">
+                    <h3 className="text-xl font-semibold">{selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        {table.getHeaderGroups().map(headerGroup => (
+                          <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
+                            {headerGroup.headers.map(header => (
+                              <th key={header.id} onClick={header.column.getToggleSortingHandler()} className="px-8 py-5 text-left text-sm font-medium text-zinc-400 hover:text-white cursor-pointer">
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </th>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </thead>
-                  <tbody>
-                    {table.getRowModel().rows.map(row => (
-                      <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
-                        {row.getVisibleCells().map(cell => (
-                          <td key={cell.id} className="px-8 py-6">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
+                      </thead>
+                      <tbody>
+                        {table.getRowModel().rows.map(row => (
+                          <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
+                            {row.getVisibleCells().map(cell => (
+                              <td key={cell.id} className="px-8 py-6">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Filters Tab */}
+          {activeTab === 'filters' && (
+            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
+              <h2 className="text-2xl font-semibold mb-2">Downloadable Export Filters</h2>
+              <p className="text-zinc-400 mb-8">Filter to one position in FM first, then add these columns in Customize View for the best Value Scout results.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Object.keys(recommendedColumns).map((pos) => (
+                  <div key={pos} className="bg-zinc-800 rounded-3xl p-6 border border-zinc-700">
+                    <div className="font-semibold text-lg mb-4">{pos}</div>
+                    <div className="text-sm text-zinc-400 mb-6 space-y-1 font-mono">
+                      {recommendedColumns[pos].map((col, i) => <div key={i}>• {col}</div>)}
+                    </div>
+                    <div className="flex gap-3">
+                      <button onClick={() => copyColumns(pos)} className="flex-1 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 py-3 rounded-2xl transition">
+                        <Copy className="w-4 h-4" /> Copy Columns
+                      </button>
+                      <button onClick={() => downloadColumns(pos)} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl transition">
+                        <FileText className="w-4 h-4" /> Download TXT
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-10 text-sm text-zinc-400 bg-zinc-800 p-6 rounded-3xl">
+                <strong>Pro Tip:</strong> After adding columns, sort by Minutes (descending) and set a minimum of 800–1000 minutes played for more reliable per-90 stats.
               </div>
             </div>
           )}
@@ -482,9 +479,7 @@ export default function FMValueScoutV2() {
                   <div className="text-xs text-zinc-500">{shortlist.length} players</div>
                 </div>
               </div>
-              {shortlist.length > 0 && (
-                <button onClick={clearShortlist} className="text-red-400 hover:text-red-500 text-sm">Clear</button>
-              )}
+              {shortlist.length > 0 && <button onClick={clearShortlist} className="text-red-400 hover:text-red-500 text-sm">Clear</button>}
             </div>
 
             {shortlist.length === 0 ? (
@@ -497,10 +492,7 @@ export default function FMValueScoutV2() {
                       <div className="font-medium">{player.name}</div>
                       <div className="text-emerald-400 text-sm">{player.valueScore} • {player.position}</div>
                     </div>
-                    <button 
-                      onClick={() => removeFromShortlist(player.id)} 
-                      className="text-zinc-400 hover:text-red-400"
-                    >
+                    <button onClick={() => removeFromShortlist(player.id)} className="text-zinc-400 hover:text-red-400">
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
@@ -511,17 +503,9 @@ export default function FMValueScoutV2() {
         </div>
       </div>
 
-      {/* Footer */}
       <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
-        <div className="max-w-7xl mx-auto px-6">
-          Made with ❤️ for the Football Manager community • 
-          <button 
-            onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} 
-            className="hover:text-emerald-400 ml-1 underline"
-          >
-            Support the Tool
-          </button>
-        </div>
+        Made with ❤️ for the Football Manager community • 
+        <button onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} className="hover:text-emerald-400 ml-1 underline">Support the Tool</button>
       </footer>
 
       {/* Player Modal */}
@@ -536,9 +520,7 @@ export default function FMValueScoutV2() {
                   <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
-                <X className="w-8 h-8" />
-              </button>
+              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white"><X className="w-8 h-8" /></button>
             </div>
 
             <div className="p-8 flex-1 overflow-auto">
@@ -550,37 +532,20 @@ export default function FMValueScoutV2() {
 
               <div className="space-y-8 mb-12">
                 <div>
-                  <div className="flex justify-between mb-2 text-sm">
-                    <span>Performance (Stats)</span>
-                    <span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span>
-                  </div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} />
-                  </div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2 text-sm">
-                    <span>Value for Money</span>
-                    <span className="font-mono text-amber-400">{selectedPlayer.valuePercent}%</span>
-                  </div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-500" style={{ width: `${selectedPlayer.valuePercent}%` }} />
-                  </div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-amber-400">{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2 text-sm">
-                    <span>Age Factor</span>
-                    <span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span>
-                  </div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} />
-                  </div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
                 </div>
               </div>
 
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" /> All Exported Stats
-              </h3>
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
                   <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
@@ -592,10 +557,7 @@ export default function FMValueScoutV2() {
             </div>
 
             <div className="p-8 border-t border-zinc-700">
-              <button 
-                onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }}
-                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3"
-              >
+              <button onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3">
                 <Plus className="w-5 h-5" /> Add to Shortlist
               </button>
             </div>

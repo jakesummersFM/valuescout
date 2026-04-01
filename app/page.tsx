@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Settings } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -76,14 +76,17 @@ export default function FMValueScoutV2() {
       return def;
     };
 
-    const goals = getNum(['Goals', 'Gls']);
-    const assists = getNum(['Assists', 'Ast']);
-    const xG = getNum(['xG', 'Expected Goals', 'xG/90']);
-    const keyPasses = getNum(['Key Passes', 'KP']);
-    const tackles = getNum(['Tackles', 'Tkl']);
-    const interceptions = getNum(['Interceptions', 'Int']);
+    const minutes = getNum(['Minutes', 'Mins', 'Min', '90s']) || 90;
+    const per90 = (stat: number) => (minutes > 0 ? stat / (minutes / 90) : stat);
+
+    const goals = per90(getNum(['Goals', 'Gls']));
+    const assists = per90(getNum(['Assists', 'Ast']));
+    const xG = per90(getNum(['xG', 'Expected Goals', 'xG/90']));
+    const keyPasses = per90(getNum(['Key Passes', 'KP']));
+    const tackles = per90(getNum(['Tackles', 'Tkl']));
+    const interceptions = per90(getNum(['Interceptions', 'Int']));
     const savePct = getNum(['Save %', 'Save Percentage', 'Saves %']);
-    const shots = getNum(['Shots', 'Total Shots']);
+    const shots = per90(getNum(['Shots', 'Total Shots']));
 
     let performance = 0;
 
@@ -185,7 +188,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! League difficulty & stats used for scoring.` 
+          text: `Loaded ${parsedPlayers.length} players! Per-90 stats + league difficulty used.` 
         });
         setIsProcessing(false);
       },
@@ -204,9 +207,11 @@ export default function FMValueScoutV2() {
     parseAndProcessCSV(file);
   };
 
-  const filteredPlayers = selectedPositionFilter === 'All' 
-    ? players 
-    : players.filter(p => p.position === selectedPositionFilter);
+  const filteredPlayers = useMemo(() => {
+    return selectedPositionFilter === 'All' 
+      ? players 
+      : players.filter(p => p.position === selectedPositionFilter);
+  }, [players, selectedPositionFilter]);
 
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
@@ -351,7 +356,6 @@ export default function FMValueScoutV2() {
 
         {/* Main Content */}
         <div className="flex-1 space-y-8">
-          {/* Upload Area */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -366,7 +370,7 @@ export default function FMValueScoutV2() {
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
 
-            {/* Updated How to Export Section */}
+            {/* Improved How to Export Section */}
             <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
               <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
               <div className="mt-3 text-xs space-y-4">
@@ -375,12 +379,12 @@ export default function FMValueScoutV2() {
                 <div>
                   <strong>Recommended columns by position:</strong>
                   <ul className="list-disc pl-5 mt-2 space-y-1">
-                    <li><strong>Striker:</strong> Goals, xG, Assists, Shots</li>
-                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes, Shots</li>
-                    <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists</li>
-                    <li><strong>Wing-Back:</strong> Tackles, Key Passes, Assists</li>
-                    <li><strong>Central Defender:</strong> Tackles, Interceptions</li>
-                    <li><strong>Goalkeeper:</strong> Save %</li>
+                    <li><strong>Striker:</strong> Goals, xG, Assists, Shots, Minutes</li>
+                    <li><strong>Winger / Attacking Mid:</strong> Goals, Assists, Key Passes, Shots, Minutes</li>
+                    <li><strong>Centre Mid:</strong> Tackles, Key Passes, Assists, Minutes</li>
+                    <li><strong>Wing-Back:</strong> Tackles, Key Passes, Assists, Minutes</li>
+                    <li><strong>Central Defender:</strong> Tackles, Interceptions, Minutes</li>
+                    <li><strong>Goalkeeper:</strong> Save %, Minutes</li>
                   </ul>
                 </div>
                 

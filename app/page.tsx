@@ -19,6 +19,9 @@ interface Player {
   wage: string;
   rawData: any;
   badge: { type: 'gem' | 'overpriced' | 'overrated' | 'avoid' | 'none'; label: string; icon: string };
+  perfPercent: number;   // New
+  valuePercent: number;  // New
+  agePercent: number;    // New
 }
 
 const positionFilters = [
@@ -64,7 +67,7 @@ export default function FMValueScoutV2() {
     return 1.0;
   };
 
-  const calculateValueScore = (row: any, position: string, league: string): number => {
+  const calculateValueScore = (row: any, position: string, league: string): { score: number; perfPercent: number; valuePercent: number; agePercent: number } => {
     const getNum = (keys: string[], def = 0) => {
       for (const key of keys) {
         const val = row[key] || row[key.toLowerCase()] || row[key.replace(' ', '')];
@@ -129,7 +132,14 @@ export default function FMValueScoutV2() {
     let finalScore = (baseScore * 0.57) + (efficiency * 0.31) + ageBonus;
     finalScore *= leagueMultiplier;
 
-    return Math.max(45, Math.min(99, Math.round(finalScore)));
+    const score = Math.max(45, Math.min(99, Math.round(finalScore)));
+
+    // Dynamic percentages (normalized to 100%)
+    const perfPercent = Math.round(Math.min(100, (baseScore * 0.57 / finalScore) * 100)) || 70;
+    const valuePercent = Math.round(Math.min(100, (efficiency * 0.31 / finalScore) * 100)) || 65;
+    const agePercent = Math.round(Math.min(100, (ageBonus / finalScore) * 100)) || 45;
+
+    return { score, perfPercent, valuePercent, agePercent };
   };
 
   const calculateBadge = (score: number, valueM: number, age: number): Player['badge'] => {
@@ -159,7 +169,7 @@ export default function FMValueScoutV2() {
             const rawPos = row.Position || row.Pos || 'Other';
             const group = getPositionGroup(rawPos);
             const league = row.League || row.Competition || row.Division || '';
-            const score = calculateValueScore(row, group, league);
+            const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(row, group, league);
             const valueM = Math.max(0.1, (parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1000000) / 1000000);
             const age = parseInt(row.Age) || 25;
             const badge = calculateBadge(score, valueM, age);
@@ -180,6 +190,9 @@ export default function FMValueScoutV2() {
               wage: row.Wage || row['Weekly Wage'] || '£0',
               rawData: row,
               badge,
+              perfPercent,
+              valuePercent,
+              agePercent,
             };
           })
           .sort((a, b) => b.valueScore - a.valueScore)
@@ -370,7 +383,6 @@ export default function FMValueScoutV2() {
               Name, Position, Age, Value, Wage, Goals, xG, Assists, Tackles, Key Passes, Save %, League
             </div>
 
-            {/* Improved How to Export Section */}
             <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
               <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV from FM (Best Results)</summary>
               <div className="mt-3 text-xs space-y-4">
@@ -495,7 +507,7 @@ export default function FMValueScoutV2() {
         </div>
       </footer>
 
-      {/* Player Modal */}
+      {/* Player Modal with DYNAMIC Bar Charts */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
@@ -519,32 +531,33 @@ export default function FMValueScoutV2() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
+              {/* DYNAMIC Bar Charts */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm">
                     <span>Performance (Stats)</span>
-                    <span className="font-mono text-emerald-400">70%</span>
+                    <span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span>
                   </div>
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500" style={{ width: '70%' }} />
+                    <div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} />
                   </div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2 text-sm">
                     <span>Value for Money</span>
-                    <span className="font-mono text-amber-400">65%</span>
+                    <span className="font-mono text-amber-400">{selectedPlayer.valuePercent}%</span>
                   </div>
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-500" style={{ width: '65%' }} />
+                    <div className="h-full bg-amber-500" style={{ width: `${selectedPlayer.valuePercent}%` }} />
                   </div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2 text-sm">
                     <span>Age Factor</span>
-                    <span className="font-mono text-purple-400">45%</span>
+                    <span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span>
                   </div>
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-500" style={{ width: '45%' }} />
+                    <div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} />
                   </div>
                 </div>
               </div>

@@ -19,9 +19,9 @@ interface Player {
   wage: string;
   rawData: any;
   badge: { type: 'gem' | 'overpriced' | 'overrated' | 'avoid' | 'none'; label: string; icon: string };
-  perfPercent: number;   // New
-  valuePercent: number;  // New
-  agePercent: number;    // New
+  perfPercent: number;
+  valuePercent: number;
+  agePercent: number;
 }
 
 const positionFilters = [
@@ -86,8 +86,8 @@ export default function FMValueScoutV2() {
     const assists = per90(getNum(['Assists', 'Ast']));
     const xG = per90(getNum(['xG', 'Expected Goals', 'xG/90']));
     const keyPasses = per90(getNum(['Key Passes', 'KP']));
-    const tackles = per90(getNum(['Tackles', 'Tkl']));
-    const interceptions = per90(getNum(['Interceptions', 'Int']));
+    const tackles = per90(getNum(['Tackles', 'Tkl', 'Tck C']));
+    const interceptions = per90(getNum(['Interceptions', 'Itc']));
     const savePct = getNum(['Save %', 'Save Percentage', 'Saves %']);
     const shots = per90(getNum(['Shots', 'Total Shots']));
 
@@ -98,45 +98,45 @@ export default function FMValueScoutV2() {
         performance = savePct * 2.8;
         break;
       case 'Wing Back':
-        performance = (tackles * 2.0) + (keyPasses * 1.8) + (assists * 1.5);
+        performance = (tackles * 2.2) + (keyPasses * 1.9) + (assists * 1.6);
         break;
       case 'Central Defender':
-        performance = (tackles * 2.4) + (interceptions * 2.2);
+        performance = (tackles * 2.6) + (interceptions * 2.4);   // Boosted for your data
         break;
       case 'Centre Mid':
-        performance = (tackles * 2.0) + (keyPasses * 2.1) + (assists * 1.7);
+        performance = (tackles * 2.2) + (keyPasses * 2.2) + (assists * 1.8);
         break;
       case 'Attacking Mid':
-        performance = (assists * 2.5) + (keyPasses * 2.3) + (goals * 1.6) + (shots * 0.4);
+        performance = (assists * 2.6) + (keyPasses * 2.4) + (goals * 1.7) + (shots * 0.5);
         break;
       case 'Winger':
-        performance = (assists * 2.2) + (keyPasses * 2.0) + (goals * 1.8) + (shots * 0.5);
+        performance = (assists * 2.3) + (keyPasses * 2.1) + (goals * 1.9) + (shots * 0.6);
         break;
       case 'Striker':
-        performance = (goals * 3.5) + (assists * 1.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35) + (shots * 0.6);
+        performance = (goals * 3.6) + (assists * 2.0) + (xG > 0 ? (goals / xG) * 48 : goals * 37) + (shots * 0.7);
         break;
       default:
-        performance = (goals + assists + tackles + keyPasses) * 1.8;
+        performance = (goals + assists + tackles + keyPasses) * 2.0;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.3;
+    let baseScore = performance * 2.4;
 
     const valueM = Math.max(0.1, (getNum(['Transfer Value', 'Value']) || 1000000) / 1000000);
     const wageK = Math.max(1, (getNum(['Wage', 'Weekly Wage']) || 1000) / 1000);
-    const efficiency = Math.min(34, Math.max(12, 65 / (valueM * 0.55 + wageK * 0.45)));
+    const efficiency = Math.min(36, Math.max(15, 70 / (valueM * 0.5 + wageK * 0.5)));
 
     const age = parseInt(row.Age) || 25;
-    const ageBonus = age <= 21 ? 18 : age <= 23 ? 12 : age <= 26 ? 8 : age >= 32 ? -6 : 0;
+    const ageBonus = age <= 21 ? 19 : age <= 23 ? 13 : age <= 26 ? 9 : age >= 32 ? -7 : 0;
 
-    let finalScore = (baseScore * 0.57) + (efficiency * 0.31) + ageBonus;
+    let finalScore = (baseScore * 0.56) + (efficiency * 0.32) + ageBonus;
     finalScore *= leagueMultiplier;
 
     const score = Math.max(45, Math.min(99, Math.round(finalScore)));
 
-    // Dynamic percentages (normalized to 100%)
-    const perfPercent = Math.round(Math.min(100, (baseScore * 0.57 / finalScore) * 100)) || 70;
-    const valuePercent = Math.round(Math.min(100, (efficiency * 0.31 / finalScore) * 100)) || 65;
+    // Dynamic bar percentages
+    const perfPercent = Math.round(Math.min(100, (baseScore * 0.56 / finalScore) * 100)) || 60;
+    const valuePercent = Math.round(Math.min(100, (efficiency * 0.32 / finalScore) * 100)) || 65;
     const agePercent = Math.round(Math.min(100, (ageBonus / finalScore) * 100)) || 45;
 
     return { score, perfPercent, valuePercent, agePercent };
@@ -168,7 +168,7 @@ export default function FMValueScoutV2() {
           .map((row: any, index: number) => {
             const rawPos = row.Position || row.Pos || 'Other';
             const group = getPositionGroup(rawPos);
-            const league = row.League || row.Competition || row.Division || '';
+            const league = row.League || row.Division || row.Competition || '';
             const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(row, group, league);
             const valueM = Math.max(0.1, (parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.]/g, '')) || 1000000) / 1000000);
             const age = parseInt(row.Age) || 25;
@@ -185,9 +185,9 @@ export default function FMValueScoutV2() {
               valueScore: score,
               keyStat: group === 'Striker' ? `xG: ${row['xG'] || '-'} | Shots: ${row['Shots'] || '-'}` : 
                        group === 'GK' ? `Save%: ${row['Save %'] || '-'}` : 
-                       `Key: ${row.Goals || row.Assists || row.Tackles || '-'}`,
-              transferValue: row['Transfer Value'] || row.Value || '£0',
-              wage: row.Wage || row['Weekly Wage'] || '£0',
+                       `Key: ${row['Tck C'] || row.Tackles || '-'}`,
+              transferValue: row['Transfer Value'] || row.Value || '€0',
+              wage: row.Wage || row['Weekly Wage'] || '€0',
               rawData: row,
               badge,
               perfPercent,
@@ -507,7 +507,7 @@ export default function FMValueScoutV2() {
         </div>
       </footer>
 
-      {/* Player Modal with DYNAMIC Bar Charts */}
+      {/* Player Modal with Dynamic Bars */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
@@ -531,7 +531,6 @@ export default function FMValueScoutV2() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
-              {/* DYNAMIC Bar Charts */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm">

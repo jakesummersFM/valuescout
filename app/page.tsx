@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText, Twitch, Twitter } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -98,12 +98,15 @@ export default function FMValueScoutV2() {
     const shots = per90(getNum(['Shots']));
     const crosses = per90(getNum(['Cr C', 'Crosses']));
     const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);
+    const cleanSheets = getNum(['Clean Sheets']);
 
     let performance = 0;
 
     switch (position) {
       case 'GK':
-        performance = Math.min(35, savePct * 2.4);   // Reduced multiplier + soft cap
+        const saveScore = savePct * 1.85;
+        const csPer90 = cleanSheets / (minutes / 90);
+        performance = Math.min(42, saveScore + (csPer90 * 8));   // Realistic GK scoring
         break;
       case 'Winger':
       case 'Attacking Mid':
@@ -123,7 +126,7 @@ export default function FMValueScoutV2() {
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.6;   // Reduced overall scaling
+    let baseScore = performance * 2.55;
 
     const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
     const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
@@ -188,7 +191,7 @@ export default function FMValueScoutV2() {
               league,
               valueScore: score,
               keyStat: group === 'GK' 
-                ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | Clean Sheets: ${row['Clean Sheets'] || '-'}` 
+                ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
                 : group === 'Winger' || group === 'Attacking Mid' 
                 ? `Key: ${row['Key'] || '-'} | Shots: ${row['Shots'] || '-'} | xG: ${row['xG'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
@@ -207,7 +210,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! Balanced scoring applied.` 
+          text: `Loaded ${parsedPlayers.length} players!` 
         });
         setIsProcessing(false);
       },
@@ -370,6 +373,7 @@ export default function FMValueScoutV2() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
+        {/* Position Filter Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <h3 className="font-semibold mb-4 text-lg">Filter Results</h3>
@@ -389,6 +393,7 @@ export default function FMValueScoutV2() {
           </div>
         </div>
 
+        {/* Main Content with Tabs */}
         <div className="flex-1 space-y-8">
           <div className="flex border-b border-zinc-700">
             <button 
@@ -405,6 +410,7 @@ export default function FMValueScoutV2() {
             </button>
           </div>
 
+          {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
               <div 
@@ -480,6 +486,7 @@ export default function FMValueScoutV2() {
             </div>
           )}
 
+          {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2">Downloadable Export Filters</h2>
@@ -513,45 +520,68 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
+        {/* About / Socials Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-3">
-                <Users className="w-6 h-6 text-emerald-400" />
+            <h3 className="font-semibold mb-4 text-lg flex items-center gap-2">
+              Jake Summers FM ✍️
+            </h3>
+            
+            <p className="text-sm text-zinc-400 mb-6">
+              Creator of FM Value Scout. Passionate about Moneyball-style scouting in Football Manager. 
+              Helping the community find real value on a budget.
+            </p>
+
+            <div className="space-y-3">
+              <a 
+                href="https://twitter.com/JakeSummersFM" 
+                target="_blank" 
+                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
+              >
+                <Twitter className="w-5 h-5 text-sky-400" />
                 <div>
-                  <div className="font-semibold">Shortlist</div>
-                  <div className="text-xs text-zinc-500">{shortlist.length} players</div>
+                  <div className="font-medium text-sm">Twitter / X</div>
+                  <div className="text-xs text-zinc-500">@JakeSummersFM</div>
                 </div>
-              </div>
-              {shortlist.length > 0 && <button onClick={clearShortlist} className="text-red-400 hover:text-red-500 text-sm">Clear</button>}
+              </a>
+
+              <a 
+                href="https://www.twitch.tv/jakesummersfm" 
+                target="_blank" 
+                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
+              >
+                <Twitch className="w-5 h-5 text-purple-400" />
+                <div>
+                  <div className="font-medium text-sm">Twitch</div>
+                  <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
+                </div>
+              </a>
+
+              <a 
+                href="https://ko-fi.com/jakesummersfm" 
+                target="_blank" 
+                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
+              >
+                <Heart className="w-5 h-5 text-red-400" />
+                <div>
+                  <div className="font-medium text-sm">Support on Ko-fi</div>
+                  <div className="text-xs text-zinc-500">Keep the tool free</div>
+                </div>
+              </a>
             </div>
 
-            {shortlist.length === 0 ? (
-              <div className="text-center py-16 text-zinc-500">Add players from the table</div>
-            ) : (
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {shortlist.map(player => (
-                  <div key={player.id} className="bg-zinc-800 rounded-2xl p-4 flex justify-between items-center">
-                    <div>
-                      <div className="font-medium">{player.name}</div>
-                      <div className="text-emerald-400 text-sm">{player.valueScore} • {player.position}</div>
-                    </div>
-                    <button onClick={() => removeFromShortlist(player.id)} className="text-zinc-400 hover:text-red-400">
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="mt-8 text-xs text-zinc-500 text-center">
+              Thank you for using FM Value Scout ❤️
+            </div>
           </div>
         </div>
       </div>
 
       <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • 
-        <button onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} className="hover:text-emerald-400 ml-1 underline">Support the Tool</button>
+        Made with ❤️ for the Football Manager community
       </footer>
 
+      {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

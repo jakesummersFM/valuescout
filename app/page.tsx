@@ -53,7 +53,7 @@ export default function FMValueScoutV2() {
     'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG'],
     'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG', 'Cr C'],
     'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Shots', 'xG'],
-    'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Save %'],
+    'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Sv %', 'Svh', 'Clean Sheets', 'Save %'],
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
@@ -79,7 +79,7 @@ export default function FMValueScoutV2() {
   const calculateValueScore = (row: any, position: string, league: string): { score: number; perfPercent: number; valuePercent: number; agePercent: number } => {
     const getNum = (keys: string[], def = 0) => {
       for (const key of keys) {
-        let val = row[key] || row[key.toLowerCase()] || row[key.replace(/ /g, '')];
+        let val = row[key] || row[key.toLowerCase()] || row[key.replace(/ /g, '')] || row[key.replace('%', ' %')];
         if (val !== undefined) {
           const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
           if (!isNaN(num)) return num;
@@ -97,10 +97,14 @@ export default function FMValueScoutV2() {
     const keyPasses = per90(getNum(['Key Passes', 'KP', 'Key']));
     const shots = per90(getNum(['Shots']));
     const crosses = per90(getNum(['Cr C', 'Crosses']));
+    const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);   // Fixed for your GK file
 
     let performance = 0;
 
     switch (position) {
+      case 'GK':
+        performance = savePct * 3.2;   // Strong boost for GK
+        break;
       case 'Winger':
       case 'Attacking Mid':
         performance = (assists * 2.9) + (keyPasses * 3.1) + (goals * 2.6) + (shots * 1.0) + (xG > 0 ? (goals / xG) * 48 : goals * 38) + (crosses * 0.7);
@@ -183,7 +187,9 @@ export default function FMValueScoutV2() {
               position: group,
               league,
               valueScore: score,
-              keyStat: group === 'Winger' || group === 'Attacking Mid' 
+              keyStat: group === 'GK' 
+                ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | Clean Sheets: ${row['Clean Sheets'] || '-'}` 
+                : group === 'Winger' || group === 'Attacking Mid' 
                 ? `Key: ${row['Key'] || '-'} | Shots: ${row['Shots'] || '-'} | xG: ${row['xG'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
@@ -201,7 +207,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! Key column now properly detected.` 
+          text: `Loaded ${parsedPlayers.length} players! GK Save % column now fixed.` 
         });
         setIsProcessing(false);
       },
@@ -227,14 +233,10 @@ export default function FMValueScoutV2() {
   }, [players, selectedPositionFilter]);
 
   const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) {
-      setShortlist([...shortlist, player]);
-    }
+    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
   };
 
-  const removeFromShortlist = (id: number) => {
-    setShortlist(shortlist.filter(p => p.id !== id));
-  };
+  const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
 
   const clearShortlist = () => setShortlist([]);
 

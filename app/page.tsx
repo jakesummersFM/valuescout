@@ -73,7 +73,7 @@ export default function FMValueScoutV2() {
     const l = (league || '').toLowerCase();
     if (l.includes('premier') || l.includes('bundesliga') || l.includes('la liga') || l.includes('serie a') || l.includes('ligue 1')) return 1.25;
     if (l.includes('championship') || l.includes('2. bundesliga') || l.includes('ligue 2')) return 1.12;
-    return 1.05; // Slight boost for your Second/First Division data
+    return 1.05;
   };
 
   const calculateValueScore = (row: any, position: string, league: string): { score: number; perfPercent: number; valuePercent: number; agePercent: number } => {
@@ -94,7 +94,7 @@ export default function FMValueScoutV2() {
     const goals = per90(getNum(['Goals', 'Gls']));
     const assists = per90(getNum(['Assists', 'Ast']));
     const xG = per90(getNum(['xG']));
-    const keyPasses = per90(getNum(['Key Passes', 'KP', 'Key'])); // Fixed for your file
+    const keyPasses = per90(getNum(['Key Passes', 'KP', 'Key']));
     const shots = per90(getNum(['Shots']));
     const crosses = per90(getNum(['Cr C', 'Crosses']));
 
@@ -119,7 +119,7 @@ export default function FMValueScoutV2() {
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 3.0; // Increased for attacking data
+    let baseScore = performance * 3.0;
 
     const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
     const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
@@ -201,7 +201,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! Key Passes column now properly read.` 
+          text: `Loaded ${parsedPlayers.length} players! Key column now properly detected.` 
         });
         setIsProcessing(false);
       },
@@ -225,6 +225,48 @@ export default function FMValueScoutV2() {
       ? players 
       : players.filter(p => p.position === selectedPositionFilter);
   }, [players, selectedPositionFilter]);
+
+  const addToShortlist = (player: Player) => {
+    if (!shortlist.find(p => p.id === player.id)) {
+      setShortlist([...shortlist, player]);
+    }
+  };
+
+  const removeFromShortlist = (id: number) => {
+    setShortlist(shortlist.filter(p => p.id !== id));
+  };
+
+  const clearShortlist = () => setShortlist([]);
+
+  const exportShortlist = () => {
+    if (shortlist.length === 0) return;
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "fm-value-scout-shortlist.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const copyColumns = (position: string) => {
+    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
+    navigator.clipboard.writeText(cols.join(', '));
+    alert(`✅ Copied recommended columns for ${position}`);
+  };
+
+  const downloadColumns = (position: string) => {
+    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
+    const content = `Recommended columns for ${position} (FM Value Scout)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ValueScout-${position.replace(/\s+/g, '-')}-Columns.txt`;
+    link.click();
+  };
 
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
@@ -295,44 +337,6 @@ export default function FMValueScoutV2() {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-
-  const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
-  };
-
-  const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
-
-  const clearShortlist = () => setShortlist([]);
-
-  const exportShortlist = () => {
-    if (shortlist.length === 0) return;
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "fm-value-scout-shortlist.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const copyColumns = (position: string) => {
-    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    navigator.clipboard.writeText(cols.join(', '));
-    alert(`✅ Copied recommended columns for ${position}`);
-  };
-
-  const downloadColumns = (position: string) => {
-    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ValueScout-${position.replace(/\s+/g, '-')}-Columns.txt`;
-    link.click();
-  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">

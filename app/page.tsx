@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText, Twitch, Twitter } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -533,29 +533,7 @@ export default function FMValueScoutV2() {
             </p>
 
             <div className="space-y-3">
-              <a 
-                href="https://twitter.com/JakeSummersFM" 
-                target="_blank" 
-                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
-              >
-                <Twitter className="w-5 h-5 text-sky-400" />
-                <div>
-                  <div className="font-medium text-sm">Twitter / X</div>
-                  <div className="text-xs text-zinc-500">@JakeSummersFM</div>
-                </div>
-              </a>
 
-              <a 
-                href="https://www.twitch.tv/jakesummersfm" 
-                target="_blank" 
-                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
-              >
-                <Twitch className="w-5 h-5 text-purple-400" />
-                <div>
-                  <div className="font-medium text-sm">Twitch</div>
-                  <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
-                </div>
-              </a>
 
               <a 
                 href="https://ko-fi.com/jakesummersfm" 

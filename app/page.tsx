@@ -97,50 +97,50 @@ export default function FMValueScoutV2() {
     const keyPasses = per90(getNum(['Key Passes', 'KP', 'Key']));
     const shots = per90(getNum(['Shots']));
     const crosses = per90(getNum(['Cr C', 'Crosses']));
-    const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);   // Fixed for your GK file
+    const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);
 
     let performance = 0;
 
     switch (position) {
       case 'GK':
-        performance = savePct * 3.2;   // Strong boost for GK
+        performance = Math.min(35, savePct * 2.4);   // Reduced multiplier + soft cap
         break;
       case 'Winger':
       case 'Attacking Mid':
-        performance = (assists * 2.9) + (keyPasses * 3.1) + (goals * 2.6) + (shots * 1.0) + (xG > 0 ? (goals / xG) * 48 : goals * 38) + (crosses * 0.7);
+        performance = (assists * 2.8) + (keyPasses * 2.9) + (goals * 2.5) + (shots * 0.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35) + (crosses * 0.6);
         break;
       case 'Striker':
-        performance = (goals * 4.3) + (assists * 2.4) + (xG > 0 ? (goals / xG) * 60 : goals * 46) + (shots * 1.1);
+        performance = (goals * 4.0) + (assists * 2.2) + (xG > 0 ? (goals / xG) * 55 : goals * 42) + (shots * 1.0);
         break;
       case 'Centre Mid':
-        performance = (keyPasses * 2.8) + (assists * 2.3) + (goals * 1.8);
+        performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
         break;
       case 'Wing Back':
-        performance = (keyPasses * 2.6) + (assists * 2.1) + (goals * 1.6);
+        performance = (keyPasses * 2.5) + (assists * 2.0) + (goals * 1.5);
         break;
       default:
-        performance = (goals + assists + keyPasses + shots) * 2.9;
+        performance = (goals + assists + keyPasses + shots) * 2.7;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 3.0;
+    let baseScore = performance * 2.6;   // Reduced overall scaling
 
     const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
     const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
     const wageK = Math.max(0.5, (getNum(['Wage']) || 1000) / 1000);
 
-    const efficiency = Math.min(50, Math.max(24, 95 / (valueM * 0.38 + wageK * 0.62)));
+    const efficiency = Math.min(48, Math.max(22, 92 / (valueM * 0.4 + wageK * 0.6)));
 
     const age = parseInt(row.Age) || 25;
-    const ageBonus = age <= 21 ? 25 : age <= 23 ? 18 : age <= 26 ? 11 : age >= 33 ? -12 : 0;
+    const ageBonus = age <= 21 ? 24 : age <= 23 ? 16 : age <= 26 ? 9 : age >= 33 ? -11 : 0;
 
-    let finalScore = (baseScore * 0.52) + (efficiency * 0.36) + ageBonus;
+    let finalScore = (baseScore * 0.53) + (efficiency * 0.35) + ageBonus;
     finalScore *= leagueMultiplier;
 
     const score = Math.max(48, Math.min(99, Math.round(finalScore)));
 
-    const perfPercent = Math.round(Math.min(100, (baseScore * 0.52 / Math.max(finalScore, 1)) * 100)) || 68;
-    const valuePercent = Math.round(Math.min(100, (efficiency * 0.36 / Math.max(finalScore, 1)) * 100)) || 62;
+    const perfPercent = Math.round(Math.min(100, (baseScore * 0.53 / Math.max(finalScore, 1)) * 100)) || 65;
+    const valuePercent = Math.round(Math.min(100, (efficiency * 0.35 / Math.max(finalScore, 1)) * 100)) || 60;
     const agePercent = Math.round(Math.min(100, (ageBonus / Math.max(finalScore, 1)) * 100)) || 45;
 
     return { score, perfPercent, valuePercent, agePercent };
@@ -207,7 +207,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! GK Save % column now fixed.` 
+          text: `Loaded ${parsedPlayers.length} players! Balanced scoring applied.` 
         });
         setIsProcessing(false);
       },
@@ -370,7 +370,6 @@ export default function FMValueScoutV2() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
-        {/* Position Filter Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <h3 className="font-semibold mb-4 text-lg">Filter Results</h3>
@@ -390,7 +389,6 @@ export default function FMValueScoutV2() {
           </div>
         </div>
 
-        {/* Main Content with Tabs */}
         <div className="flex-1 space-y-8">
           <div className="flex border-b border-zinc-700">
             <button 
@@ -407,7 +405,6 @@ export default function FMValueScoutV2() {
             </button>
           </div>
 
-          {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
               <div 
@@ -483,7 +480,6 @@ export default function FMValueScoutV2() {
             </div>
           )}
 
-          {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2">Downloadable Export Filters</h2>
@@ -517,7 +513,6 @@ export default function FMValueScoutV2() {
           )}
         </div>
 
-        {/* Shortlist Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
             <div className="flex justify-between items-center mb-6">
@@ -557,7 +552,6 @@ export default function FMValueScoutV2() {
         <button onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} className="hover:text-emerald-400 ml-1 underline">Support the Tool</button>
       </footer>
 
-      {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

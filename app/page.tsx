@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -45,6 +45,7 @@ export default function FMValueScoutV3() {
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'filters'>('upload');
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc'],
@@ -120,7 +121,6 @@ export default function FMValueScoutV3() {
         performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
         break;
       case 'Wing Back':
-        // Fixed for your CSV — now properly rewards Tck C, Itc, Key, Assists
         performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1) + (goals * 1.6);
         break;
       case 'Central Defender':
@@ -221,10 +221,10 @@ export default function FMValueScoutV3() {
         if (lowScoreCount > parsedPlayers.length * 0.5) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored ~48. This often happens when key stats are missing. Use the "Downloadable Filters" tab for the exact columns needed for this position.` 
+            text: `Many players scored around 48. This is common when key stats (like Tackles, Key Passes, Save %, Shots, etc.) are missing or zero. Check the big box above and the Downloadable Filters tab.` 
           });
         } else {
-          setUploadMessage({ type: 'success', text: `Loaded ${parsedPlayers.length} players! V3.2 scoring active.` });
+          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Great data — scores should spread nicely now.` });
         }
         setIsProcessing(false);
       },
@@ -274,7 +274,7 @@ export default function FMValueScoutV3() {
 
   const downloadColumns = (position: string) => {
     const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const content = `Recommended columns for ${position} (FM Value Scout V3.4)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -361,7 +361,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3.2 • Moneyball for Football Manager</div>
+              <div className="text-xs text-violet-400 -mt-1">V3.4 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -434,12 +434,15 @@ export default function FMValueScoutV3() {
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
                 <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
 
-                <div className="bg-red-950/50 border border-red-700 rounded-2xl p-5 mb-8 max-w-md mx-auto">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-6 h-6 text-red-400 mt-0.5" />
-                    <div className="text-sm text-red-300">
-                      <strong>Important:</strong> Missing or zero columns (e.g. Goals, Shots, Sv %, Tackles) will heavily lower scores. 
-                      Use the "Downloadable Filters" tab for the exact columns needed.
+                {/* Clearer, friendlier warning for video viewers */}
+                <div className="bg-amber-950/60 border border-amber-600 rounded-2xl p-6 mb-8 max-w-lg mx-auto">
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-left text-sm text-amber-200">
+                      <strong>Why do some players score 48?</strong><br />
+                      The scoring needs specific stats for each position (e.g. Tackles/Interceptions for defenders, Key Passes for mids, Save % for keepers).<br /><br />
+                      <strong>Quick fix:</strong> In FM, filter to **one position only**, add the recommended columns (see tab below), and export again. 
+                      Currency and wage format (p/w or p/a) don't matter — the app handles them automatically.
                     </div>
                   </div>
                 </div>
@@ -448,13 +451,14 @@ export default function FMValueScoutV3() {
                   <summary className="font-medium hover:text-violet-400 mb-2">How to Export the Perfect CSV</summary>
                   <div className="mt-3 text-xs space-y-4">
                     <div className="bg-zinc-800 p-4 rounded-2xl">
-                      <strong>Best Time:</strong> Export after 20–25+ games for reliable spread.
+                      <strong>Best Time:</strong> Export after 20–25+ games for the best score spread.
                     </div>
-                    <p><strong>Pro Tip:</strong> Filter to one position before exporting and include all recommended columns.</p>
+                    <p><strong>Pro Tip for Videos:</strong> Filter to one position and include the exact columns from the Downloadable Filters tab.</p>
                   </div>
                 </details>
 
-                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer transition inline-block">
+                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer transition inline-block flex items-center justify-center gap-3 mx-auto">
+                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
                   Choose CSV File
                   <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
                 </label>
@@ -464,6 +468,28 @@ export default function FMValueScoutV3() {
                     {uploadMessage.text}
                   </div>
                 )}
+
+                {/* New Scoring Explained section – perfect for Clayts video */}
+                <div className="mt-10 max-w-md mx-auto">
+                  <button 
+                    onClick={() => setShowScoringInfo(!showScoringInfo)}
+                    className="text-violet-400 hover:text-violet-300 flex items-center gap-2 mx-auto text-sm font-medium"
+                  >
+                    <BarChart3 className="w-4 h-4" /> How does the scoring actually work?
+                  </button>
+                  {showScoringInfo && (
+                    <div className="mt-4 text-left text-xs text-zinc-400 bg-zinc-900/80 p-5 rounded-2xl border border-violet-900/50">
+                      <p className="mb-3">Moneyball-style formula:</p>
+                      <ul className="space-y-2">
+                        <li>• <strong>Performance (~53%)</strong>: Position-specific stats (per 90)</li>
+                        <li>• <strong>Value for Money (~35%)</strong>: Low transfer value + low wage = big bonus</li>
+                        <li>• <strong>Age bonus</strong>: Young players ≤23 get extra points</li>
+                        <li>• League multiplier for top divisions</li>
+                      </ul>
+                      <p className="mt-4 text-amber-300">Missing key stats = lower performance score (often 48 floor).</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {players.length > 0 && (
@@ -508,11 +534,11 @@ export default function FMValueScoutV3() {
             </div>
           )}
 
-          {/* Filters Tab */}
+          {/* Filters Tab (unchanged but kept for completeness) */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
-              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for best results.</p>
+              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for the best scoring spread.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.keys(recommendedColumns).map((pos) => (
@@ -560,7 +586,6 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* Replace with an icon or text if needed */}
                 <span className="w-5 h-5 text-sky-400">🐦</span>
                 <div>
                   <div className="font-medium text-sm">Twitter / X</div>
@@ -573,7 +598,6 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* Replace with an icon or text if needed */}
                 <span className="w-5 h-5 text-purple-400">🎮</span>
                 <div>
                   <div className="font-medium text-sm">Twitch</div>
@@ -602,10 +626,10 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3.2
+        Made with ❤️ for the Football Manager community • V3.4 (Video Ready)
       </footer>
 
-      {/* Player Modal */}
+      {/* Player Modal (unchanged) */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

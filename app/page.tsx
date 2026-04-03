@@ -70,7 +70,7 @@ export default function FMValueScoutV3() {
       if (p.includes('st') || p.includes('cf')) return 'Striker';
     }
 
-    // Smart fallback when Position column is missing
+    // Smart fallback when Position is missing
     if (row) {
       const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
       const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
@@ -82,7 +82,7 @@ export default function FMValueScoutV3() {
       if (key > 25 || assists > 5) return 'Attacking Mid';
       if (key > 15) return 'Centre Mid';
     }
-    return 'Centre Mid'; // safe default
+    return 'Centre Mid';
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -238,15 +238,15 @@ export default function FMValueScoutV3() {
         if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `⚠️ Position column was missing in ${missingPositionCount} rows. The app tried to guess, but for best results always include the Position column when exporting.` 
+            text: `⚠️ Position column was missing in some rows. The app tried to guess based on stats, but for best results always include the Position column when exporting.` 
           });
         } else if (lowScoreCount > parsedPlayers.length * 0.5) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored around 48. Add more key stats (Tackles, Key Passes, Save %, etc.) using the Downloadable Filters tab.` 
+            text: `Many players scored around 48. This usually means key stats are missing. Use the Downloadable Filters tab for recommended columns.` 
           });
         } else {
-          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Great data — scores should spread nicely.` });
+          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Scores should now spread nicely.` });
         }
         setIsProcessing(false);
       },
@@ -383,7 +383,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3.5 • Ready for Clayts!</div>
+              <div className="text-xs text-violet-400 -mt-1">V3.5 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -460,8 +460,8 @@ export default function FMValueScoutV3() {
                   <div className="flex items-start gap-4">
                     <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-left text-sm text-amber-200">
-                      <strong>Common Issue:</strong> Missing <strong>Position</strong> column causes low scores (48).<br />
-                      The app now tries to guess, but for best results always include <strong>Position</strong> when exporting from FM.<br /><br />
+                      <strong>Common Issue:</strong> Missing <strong>Position</strong> column often causes low scores (48).<br />
+                      The app now tries to guess from stats, but for best results always include the <strong>Position</strong> column when exporting.<br /><br />
                       Currency ($) and wage format (p/w or p/a) are handled automatically.
                     </div>
                   </div>
@@ -473,7 +473,7 @@ export default function FMValueScoutV3() {
                     <div className="bg-zinc-800 p-4 rounded-2xl">
                       <strong>Best Time:</strong> Export after 20–25+ games for the best score spread.
                     </div>
-                    <p><strong>Pro Tip:</strong> Filter to one position only and include the Position column + recommended stats from the Filters tab.</p>
+                    <p><strong>Pro Tip:</strong> Filter to one position only and include the Position column + recommended stats.</p>
                   </div>
                 </details>
 
@@ -642,7 +642,7 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3.5 (Production Ready for Clayts!)
+        Made with ❤️ for the Football Manager community • V3.5
       </footer>
 
       {/* Player Modal */}

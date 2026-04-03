@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, Twitch, Twitter, AlertCircle } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {

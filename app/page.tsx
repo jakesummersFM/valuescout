@@ -35,7 +35,7 @@ const positionFilters = [
   { label: 'Striker', value: 'Striker' },
 ];
 
-export default function FMValueScoutV2() {
+export default function FMValueScoutV3() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
@@ -210,7 +210,7 @@ export default function FMValueScoutV2() {
         setPlayers(parsedPlayers);
         setUploadMessage({ 
           type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players!` 
+          text: `Loaded ${parsedPlayers.length} players! V3 scoring active.` 
         });
         setIsProcessing(false);
       },
@@ -293,7 +293,7 @@ export default function FMValueScoutV2() {
       header: 'Value Score',
       cell: ({ row }: any) => {
         const score = row.original.valueScore;
-        const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-amber-500' : 'bg-orange-500';
+        const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-violet-500' : 'bg-orange-500';
         const badge = row.original.badge;
         return (
           <div className="flex items-center gap-3">
@@ -325,7 +325,7 @@ export default function FMValueScoutV2() {
           <button 
             onClick={() => addToShortlist(row.original)}
             disabled={shortlist.some(p => p.id === row.original.id)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2 transition"
+            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2 transition"
           >
             <Plus className="w-4 h-4" /> Add
           </button>
@@ -344,14 +344,14 @@ export default function FMValueScoutV2() {
   });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-50">
+    <div className="min-h-screen bg-[#0F0A1F] text-zinc-100 flex flex-col">
+      <nav className="border-b border-violet-900/50 bg-[#0F0A1F]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
+            <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
-              <div className="text-3xl font-bold tracking-tight">FM Value Scout</div>
-              <div className="text-xs text-emerald-400 -mt-1">Moneyball for Football Manager • V2</div>
+              <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
+              <div className="text-xs text-violet-400 -mt-1">V3 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -364,7 +364,7 @@ export default function FMValueScoutV2() {
             <button 
               onClick={exportShortlist}
               disabled={shortlist.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
+              className="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
             >
               <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
             </button>
@@ -375,15 +375,17 @@ export default function FMValueScoutV2() {
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
         {/* Position Filter Sidebar */}
         <div className="w-64 flex-shrink-0">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-lg">Filter Results</h3>
+          <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
+            <h3 className="font-semibold mb-4 text-lg text-violet-300">Filter Results</h3>
             <div className="space-y-2">
               {positionFilters.map((filter) => (
                 <button
                   key={filter.value}
                   onClick={() => setSelectedPositionFilter(filter.value)}
                   className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${
-                    selectedPositionFilter === filter.value ? 'bg-emerald-500 text-black font-medium' : 'bg-zinc-800 hover:bg-zinc-700'
+                    selectedPositionFilter === filter.value 
+                      ? 'bg-violet-600 text-white font-medium' 
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
                   }`}
                 >
                   {filter.label}
@@ -395,16 +397,16 @@ export default function FMValueScoutV2() {
 
         {/* Main Content with Tabs */}
         <div className="flex-1 space-y-8">
-          <div className="flex border-b border-zinc-700">
+          <div className="flex border-b border-violet-900/50">
             <button 
               onClick={() => setActiveTab('upload')} 
-              className={`px-8 py-4 font-medium transition ${activeTab === 'upload' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`px-8 py-4 font-medium transition ${activeTab === 'upload' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
             >
               Upload CSV
             </button>
             <button 
               onClick={() => setActiveTab('filters')} 
-              className={`px-8 py-4 font-medium transition ${activeTab === 'filters' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`px-8 py-4 font-medium transition ${activeTab === 'filters' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
             >
               Downloadable Filters
             </button>
@@ -417,13 +419,13 @@ export default function FMValueScoutV2() {
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} 
                 onDragLeave={() => setIsDragging(false)} 
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }} 
-                className={`bg-zinc-900 border-2 border-dashed ${isDragging ? 'border-emerald-500 bg-emerald-950/30' : 'border-zinc-700'} rounded-3xl p-12 text-center transition-all`}
+                className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''} rounded-3xl p-12 text-center transition-all`}
               >
-                <Upload className="w-16 h-16 mx-auto mb-6 text-emerald-400" />
-                <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+                <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
+                <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
 
                 <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
-                  <summary className="font-medium hover:text-emerald-400 mb-2">How to Export the Perfect CSV</summary>
+                  <summary className="font-medium hover:text-violet-400 mb-2">How to Export the Perfect CSV</summary>
                   <div className="mt-3 text-xs space-y-4">
                     <div className="bg-zinc-800 p-4 rounded-2xl">
                       <strong>Best Time:</strong> Export after 20–25+ games for reliable spread.
@@ -432,7 +434,7 @@ export default function FMValueScoutV2() {
                   </div>
                 </details>
 
-                <label className="bg-white text-black px-10 py-4 rounded-2xl font-semibold cursor-pointer hover:bg-zinc-200 transition inline-block">
+                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer transition inline-block">
                   Choose CSV File
                   <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
                 </label>
@@ -445,9 +447,9 @@ export default function FMValueScoutV2() {
               </div>
 
               {players.length > 0 && (
-                <div className="bg-zinc-900 border border-zinc-700 rounded-3xl overflow-hidden mt-8">
-                  <div className="px-8 py-6 border-b border-zinc-700">
-                    <h3 className="text-xl font-semibold">
+                <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden mt-8">
+                  <div className="px-8 py-6 border-b border-violet-900/50">
+                    <h3 className="text-xl font-semibold text-white">
                       {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
                     </h3>
                   </div>
@@ -455,7 +457,7 @@ export default function FMValueScoutV2() {
                     <table className="w-full">
                       <thead>
                         {table.getHeaderGroups().map(headerGroup => (
-                          <tr key={headerGroup.id} className="border-b border-zinc-800 bg-zinc-950">
+                          <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
                             {headerGroup.headers.map(header => (
                               <th 
                                 key={header.id}
@@ -470,7 +472,7 @@ export default function FMValueScoutV2() {
                       </thead>
                       <tbody>
                         {table.getRowModel().rows.map(row => (
-                          <tr key={row.id} className="border-b border-zinc-800 hover:bg-zinc-800/70 transition">
+                          <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30 transition">
                             {row.getVisibleCells().map(cell => (
                               <td key={cell.id} className="px-8 py-6">
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -488,14 +490,14 @@ export default function FMValueScoutV2() {
 
           {/* Filters Tab */}
           {activeTab === 'filters' && (
-            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-8">
-              <h2 className="text-2xl font-semibold mb-2">Downloadable Export Filters</h2>
+            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
+              <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
               <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for best results.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.keys(recommendedColumns).map((pos) => (
-                  <div key={pos} className="bg-zinc-800 rounded-3xl p-6 border border-zinc-700">
-                    <div className="font-semibold text-lg mb-4">{pos}</div>
+                  <div key={pos} className="bg-zinc-800 rounded-3xl p-6 border border-violet-900/50">
+                    <div className="font-semibold text-lg mb-4 text-violet-300">{pos}</div>
                     <div className="text-sm text-zinc-400 mb-6 space-y-1 font-mono">
                       {recommendedColumns[pos].map((col, i) => <div key={i}>• {col}</div>)}
                     </div>
@@ -508,7 +510,7 @@ export default function FMValueScoutV2() {
                       </button>
                       <button 
                         onClick={() => downloadColumns(pos)} 
-                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl transition"
+                        className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 py-3 rounded-2xl transition"
                       >
                         <FileText className="w-4 h-4" /> Download TXT
                       </button>
@@ -522,8 +524,8 @@ export default function FMValueScoutV2() {
 
         {/* About / Socials Sidebar */}
         <div className="w-80 flex-shrink-0">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-lg flex items-center gap-2">
+          <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
+            <h3 className="font-semibold mb-4 text-lg flex items-center gap-2 text-violet-300">
               Jake Summers FM ✍️
             </h3>
             
@@ -533,7 +535,29 @@ export default function FMValueScoutV2() {
             </p>
 
             <div className="space-y-3">
+              <a 
+                href="https://twitter.com/JakeSummersFM" 
+                target="_blank" 
+                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
+              >
+                <Twitter className="w-5 h-5 text-sky-400" />
+                <div>
+                  <div className="font-medium text-sm">Twitter / X</div>
+                  <div className="text-xs text-zinc-500">@JakeSummersFM</div>
+                </div>
+              </a>
 
+              <a 
+                href="https://www.twitch.tv/jakesummersfm" 
+                target="_blank" 
+                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
+              >
+                <Twitch className="w-5 h-5 text-purple-400" />
+                <div>
+                  <div className="font-medium text-sm">Twitch</div>
+                  <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
+                </div>
+              </a>
 
               <a 
                 href="https://ko-fi.com/jakesummersfm" 
@@ -555,15 +579,15 @@ export default function FMValueScoutV2() {
         </div>
       </div>
 
-      <footer className="border-t border-zinc-800 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community
+      <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
+        Made with ❤️ for the Football Manager community • V3
       </footer>
 
       {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="p-8 border-b border-zinc-700 flex justify-between items-start">
+          <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-8 border-b border-violet-900/50 flex justify-between items-start">
               <div className="flex items-center gap-4">
                 <span className="text-5xl">{selectedPlayer.nationality}</span>
                 <div>
@@ -589,8 +613,8 @@ export default function FMValueScoutV2() {
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-amber-400">{selectedPlayer.valuePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
@@ -609,7 +633,7 @@ export default function FMValueScoutV2() {
               </div>
             </div>
 
-            <div className="p-8 border-t border-zinc-700">
+            <div className="p-8 border-t border-violet-900/50">
               <button 
                 onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }}
                 className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3"

@@ -58,16 +58,31 @@ export default function FMValueScoutV3() {
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
-  const getPositionGroup = (pos: string): string => {
-    const p = (pos || '').toLowerCase();
-    if (p.includes('gk')) return 'GK';
-    if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
-    if (p.includes('dc') || p.includes('cb')) return 'Central Defender';
-    if (p.includes('cm') || p.includes('dm')) return 'Centre Mid';
-    if (p.includes('am')) return 'Attacking Mid';
-    if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
-    if (p.includes('st') || p.includes('cf')) return 'Striker';
-    return 'Other';
+  const getPositionGroup = (pos: string, row?: any): string => {
+    if (pos && pos.trim() !== '') {
+      const p = pos.toLowerCase();
+      if (p.includes('gk')) return 'GK';
+      if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
+      if (p.includes('dc') || p.includes('cb')) return 'Central Defender';
+      if (p.includes('cm') || p.includes('dm')) return 'Centre Mid';
+      if (p.includes('am')) return 'Attacking Mid';
+      if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
+      if (p.includes('st') || p.includes('cf')) return 'Striker';
+    }
+
+    // Smart fallback when Position column is missing
+    if (row) {
+      const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
+      const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
+      const key = parseFloat(row['Key'] || row['Key Passes'] || '0');
+      const assists = parseFloat(row['Assists'] || '0');
+
+      if (tck > 20 || itc > 30) return 'Central Defender';
+      if ((tck > 15 || itc > 20) && key > 10) return 'Wing Back';
+      if (key > 25 || assists > 5) return 'Attacking Mid';
+      if (key > 15) return 'Centre Mid';
+    }
+    return 'Centre Mid'; // safe default
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -177,11 +192,12 @@ export default function FMValueScoutV3() {
         }
 
         let lowScoreCount = 0;
+        let missingPositionCount = 0;
 
         const parsedPlayers: Player[] = results.data
           .map((row: any, index: number) => {
-            const rawPos = row.Position || row.Pos || 'Other';
-            const group = getPositionGroup(rawPos);
+            const rawPos = row.Position || row.Pos || '';
+            const group = getPositionGroup(rawPos, row);
             const league = row.League || row.Division || row.Competition || '';
             const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(row, group, league);
             const valueM = Math.max(0.05, parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '')) || 0.5);
@@ -189,6 +205,7 @@ export default function FMValueScoutV3() {
             const badge = calculateBadge(score, valueM, age);
 
             if (score <= 52) lowScoreCount++;
+            if (!rawPos) missingPositionCount++;
 
             return {
               id: Date.now() + index,
@@ -218,13 +235,18 @@ export default function FMValueScoutV3() {
 
         setPlayers(parsedPlayers);
 
-        if (lowScoreCount > parsedPlayers.length * 0.5) {
+        if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored around 48. This is common when key stats (like Tackles, Key Passes, Save %, Shots, etc.) are missing or zero. Check the big box above and the Downloadable Filters tab.` 
+            text: `⚠️ Position column was missing in ${missingPositionCount} rows. The app tried to guess, but for best results always include the Position column when exporting.` 
+          });
+        } else if (lowScoreCount > parsedPlayers.length * 0.5) {
+          setUploadMessage({ 
+            type: 'warning', 
+            text: `Many players scored around 48. Add more key stats (Tackles, Key Passes, Save %, etc.) using the Downloadable Filters tab.` 
           });
         } else {
-          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Great data — scores should spread nicely now.` });
+          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Great data — scores should spread nicely.` });
         }
         setIsProcessing(false);
       },
@@ -274,7 +296,7 @@ export default function FMValueScoutV3() {
 
   const downloadColumns = (position: string) => {
     const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout V3.4)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const content = `Recommended columns for ${position} (FM Value Scout V3.5)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -361,7 +383,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3.4 • Moneyball for Football Manager</div>
+              <div className="text-xs text-violet-400 -mt-1">V3.5 • Ready for Clayts!</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -434,15 +456,13 @@ export default function FMValueScoutV3() {
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
                 <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
 
-                {/* Clearer, friendlier warning for video viewers */}
                 <div className="bg-amber-950/60 border border-amber-600 rounded-2xl p-6 mb-8 max-w-lg mx-auto">
                   <div className="flex items-start gap-4">
                     <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-left text-sm text-amber-200">
-                      <strong>Why do some players score 48?</strong><br />
-                      The scoring needs specific stats for each position (e.g. Tackles/Interceptions for defenders, Key Passes for mids, Save % for keepers).<br /><br />
-                      <strong>Quick fix:</strong> In FM, filter to **one position only**, add the recommended columns (see tab below), and export again. 
-                      Currency and wage format (p/w or p/a) don't matter — the app handles them automatically.
+                      <strong>Common Issue:</strong> Missing <strong>Position</strong> column causes low scores (48).<br />
+                      The app now tries to guess, but for best results always include <strong>Position</strong> when exporting from FM.<br /><br />
+                      Currency ($) and wage format (p/w or p/a) are handled automatically.
                     </div>
                   </div>
                 </div>
@@ -453,7 +473,7 @@ export default function FMValueScoutV3() {
                     <div className="bg-zinc-800 p-4 rounded-2xl">
                       <strong>Best Time:</strong> Export after 20–25+ games for the best score spread.
                     </div>
-                    <p><strong>Pro Tip for Videos:</strong> Filter to one position and include the exact columns from the Downloadable Filters tab.</p>
+                    <p><strong>Pro Tip:</strong> Filter to one position only and include the Position column + recommended stats from the Filters tab.</p>
                   </div>
                 </details>
 
@@ -469,24 +489,20 @@ export default function FMValueScoutV3() {
                   </div>
                 )}
 
-                {/* New Scoring Explained section – perfect for Clayts video */}
                 <div className="mt-10 max-w-md mx-auto">
                   <button 
                     onClick={() => setShowScoringInfo(!showScoringInfo)}
                     className="text-violet-400 hover:text-violet-300 flex items-center gap-2 mx-auto text-sm font-medium"
                   >
-                    <BarChart3 className="w-4 h-4" /> How does the scoring actually work?
+                    <BarChart3 className="w-4 h-4" /> How does the scoring work?
                   </button>
                   {showScoringInfo && (
                     <div className="mt-4 text-left text-xs text-zinc-400 bg-zinc-900/80 p-5 rounded-2xl border border-violet-900/50">
-                      <p className="mb-3">Moneyball-style formula:</p>
-                      <ul className="space-y-2">
-                        <li>• <strong>Performance (~53%)</strong>: Position-specific stats (per 90)</li>
-                        <li>• <strong>Value for Money (~35%)</strong>: Low transfer value + low wage = big bonus</li>
-                        <li>• <strong>Age bonus</strong>: Young players ≤23 get extra points</li>
-                        <li>• League multiplier for top divisions</li>
-                      </ul>
-                      <p className="mt-4 text-amber-300">Missing key stats = lower performance score (often 48 floor).</p>
+                      Moneyball formula:<br />
+                      • Performance (stats per 90) — position-specific<br />
+                      • Value for Money (low fee + low wage = bonus)<br />
+                      • Age bonus for young players<br />
+                      Missing key stats = lower score.
                     </div>
                   )}
                 </div>
@@ -534,7 +550,7 @@ export default function FMValueScoutV3() {
             </div>
           )}
 
-          {/* Filters Tab (unchanged but kept for completeness) */}
+          {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
@@ -626,10 +642,10 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3.4 (Video Ready)
+        Made with ❤️ for the Football Manager community • V3.5 (Production Ready for Clayts!)
       </footer>
 
-      {/* Player Modal (unchanged) */}
+      {/* Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">

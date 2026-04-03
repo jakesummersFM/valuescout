@@ -540,7 +540,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                <Twitter className="w-5 h-5 text-sky-400" />
+                {/* Twitter icon removed due to missing component */}
                 <div>
                   <div className="font-medium text-sm">Twitter / X</div>
                   <div className="text-xs text-zinc-500">@JakeSummersFM</div>
@@ -552,7 +552,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                <Twitch className="w-5 h-5 text-purple-400" />
+                {/* Twitch icon removed due to missing component */}
                 <div>
                   <div className="font-medium text-sm">Twitch</div>
                   <div className="text-xs text-zinc-500">Live FM saves & scouting</div>

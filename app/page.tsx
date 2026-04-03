@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, Trash2, Users, X, Eye, BarChart3, Heart, Info, Copy, FileText } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, Twitch, Twitter, AlertCircle } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 interface Player {
@@ -48,7 +48,7 @@ export default function FMValueScoutV3() {
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc'],
-    'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Interceptions', 'Key', 'Key Passes', 'Assists'],
+    'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc', 'Key', 'Key Passes', 'Assists'],
     'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Key', 'Key Passes', 'Assists'],
     'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG'],
     'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG', 'Cr C'],
@@ -60,7 +60,7 @@ export default function FMValueScoutV3() {
   const getPositionGroup = (pos: string): string => {
     const p = (pos || '').toLowerCase();
     if (p.includes('gk')) return 'GK';
-    if (p.includes('wing back') || p.includes('wb')) return 'Wing Back';
+    if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
     if (p.includes('dc') || p.includes('cb')) return 'Central Defender';
     if (p.includes('cm') || p.includes('dm')) return 'Centre Mid';
     if (p.includes('am')) return 'Attacking Mid';
@@ -72,7 +72,7 @@ export default function FMValueScoutV3() {
   const getLeagueMultiplier = (league: string): number => {
     const l = (league || '').toLowerCase();
     if (l.includes('premier') || l.includes('bundesliga') || l.includes('la liga') || l.includes('serie a') || l.includes('ligue 1')) return 1.25;
-    if (l.includes('championship') || l.includes('2. bundesliga') || l.includes('ligue 2')) return 1.12;
+    if (l.includes('championship')) return 1.12;
     return 1.05;
   };
 
@@ -96,7 +96,8 @@ export default function FMValueScoutV3() {
     const xG = per90(getNum(['xG']));
     const keyPasses = per90(getNum(['Key Passes', 'KP', 'Key']));
     const shots = per90(getNum(['Shots']));
-    const crosses = per90(getNum(['Cr C', 'Crosses']));
+    const tackles = per90(getNum(['Tackles', 'Tck C']));
+    const interceptions = per90(getNum(['Interceptions', 'Itc']));
     const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);
     const cleanSheets = getNum(['Clean Sheets']);
 
@@ -106,11 +107,11 @@ export default function FMValueScoutV3() {
       case 'GK':
         const saveScore = savePct * 1.85;
         const csPer90 = cleanSheets / (minutes / 90);
-        performance = Math.min(42, saveScore + (csPer90 * 8));   // Realistic GK scoring
+        performance = Math.min(42, saveScore + (csPer90 * 8));
         break;
       case 'Winger':
       case 'Attacking Mid':
-        performance = (assists * 2.8) + (keyPasses * 2.9) + (goals * 2.5) + (shots * 0.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35) + (crosses * 0.6);
+        performance = (assists * 2.8) + (keyPasses * 2.9) + (goals * 2.5) + (shots * 0.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35);
         break;
       case 'Striker':
         performance = (goals * 4.0) + (assists * 2.2) + (xG > 0 ? (goals / xG) * 55 : goals * 42) + (shots * 1.0);
@@ -119,14 +120,18 @@ export default function FMValueScoutV3() {
         performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
         break;
       case 'Wing Back':
-        performance = (keyPasses * 2.5) + (assists * 2.0) + (goals * 1.5);
+        // Fixed for your CSV — now properly rewards Tck C, Itc, Key, Assists
+        performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1) + (goals * 1.6);
+        break;
+      case 'Central Defender':
+        performance = (tackles * 3.2) + (interceptions * 3.0) + (keyPasses * 1.2);
         break;
       default:
-        performance = (goals + assists + keyPasses + shots) * 2.7;
+        performance = (goals + assists + keyPasses + shots + tackles) * 2.4;
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
-    let baseScore = performance * 2.55;
+    let baseScore = performance * 2.45;
 
     const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
     const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
@@ -171,6 +176,8 @@ export default function FMValueScoutV3() {
           return;
         }
 
+        let lowScoreCount = 0;
+
         const parsedPlayers: Player[] = results.data
           .map((row: any, index: number) => {
             const rawPos = row.Position || row.Pos || 'Other';
@@ -180,6 +187,8 @@ export default function FMValueScoutV3() {
             const valueM = Math.max(0.05, parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '')) || 0.5);
             const age = parseInt(row.Age) || 25;
             const badge = calculateBadge(score, valueM, age);
+
+            if (score <= 52) lowScoreCount++;
 
             return {
               id: Date.now() + index,
@@ -192,8 +201,8 @@ export default function FMValueScoutV3() {
               valueScore: score,
               keyStat: group === 'GK' 
                 ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
-                : group === 'Winger' || group === 'Attacking Mid' 
-                ? `Key: ${row['Key'] || '-'} | Shots: ${row['Shots'] || '-'} | xG: ${row['xG'] || '-'}` 
+                : group === 'Wing Back' 
+                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'} | Key: ${row['Key'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
               wage: row.Wage || '£0',
@@ -208,10 +217,15 @@ export default function FMValueScoutV3() {
           .map((p, i) => ({ ...p, rank: i + 1 }));
 
         setPlayers(parsedPlayers);
-        setUploadMessage({ 
-          type: 'success', 
-          text: `Loaded ${parsedPlayers.length} players! V3 scoring active.` 
-        });
+
+        if (lowScoreCount > parsedPlayers.length * 0.5) {
+          setUploadMessage({ 
+            type: 'warning', 
+            text: `Many players scored ~48. This often happens when key stats are missing. Use the "Downloadable Filters" tab for the exact columns needed for this position.` 
+          });
+        } else {
+          setUploadMessage({ type: 'success', text: `Loaded ${parsedPlayers.length} players! V3.2 scoring active.` });
+        }
         setIsProcessing(false);
       },
       error: () => {
@@ -238,10 +252,6 @@ export default function FMValueScoutV3() {
   const addToShortlist = (player: Player) => {
     if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
   };
-
-  const removeFromShortlist = (id: number) => setShortlist(shortlist.filter(p => p.id !== id));
-
-  const clearShortlist = () => setShortlist([]);
 
   const exportShortlist = () => {
     if (shortlist.length === 0) return;
@@ -351,7 +361,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3 • Moneyball for Football Manager</div>
+              <div className="text-xs text-violet-400 -mt-1">V3.2 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -395,7 +405,7 @@ export default function FMValueScoutV3() {
           </div>
         </div>
 
-        {/* Main Content with Tabs */}
+        {/* Main Content */}
         <div className="flex-1 space-y-8">
           <div className="flex border-b border-violet-900/50">
             <button 
@@ -424,13 +434,23 @@ export default function FMValueScoutV3() {
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
                 <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
 
+                <div className="bg-red-950/50 border border-red-700 rounded-2xl p-5 mb-8 max-w-md mx-auto">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-6 h-6 text-red-400 mt-0.5" />
+                    <div className="text-sm text-red-300">
+                      <strong>Important:</strong> Missing or zero columns (e.g. Goals, Shots, Sv %, Tackles) will heavily lower scores. 
+                      Use the "Downloadable Filters" tab for the exact columns needed.
+                    </div>
+                  </div>
+                </div>
+
                 <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
                   <summary className="font-medium hover:text-violet-400 mb-2">How to Export the Perfect CSV</summary>
                   <div className="mt-3 text-xs space-y-4">
                     <div className="bg-zinc-800 p-4 rounded-2xl">
                       <strong>Best Time:</strong> Export after 20–25+ games for reliable spread.
                     </div>
-                    <p><strong>Pro Tip:</strong> Filter to one position before exporting.</p>
+                    <p><strong>Pro Tip:</strong> Filter to one position before exporting and include all recommended columns.</p>
                   </div>
                 </details>
 
@@ -440,7 +460,7 @@ export default function FMValueScoutV3() {
                 </label>
 
                 {uploadMessage && (
-                  <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>
                     {uploadMessage.text}
                   </div>
                 )}
@@ -522,7 +542,7 @@ export default function FMValueScoutV3() {
           )}
         </div>
 
-        {/* About / Socials Sidebar */}
+        {/* About Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
             <h3 className="font-semibold mb-4 text-lg flex items-center gap-2 text-violet-300">
@@ -540,7 +560,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* Twitter icon removed due to missing component */}
+                <Twitter className="w-5 h-5 text-sky-400" />
                 <div>
                   <div className="font-medium text-sm">Twitter / X</div>
                   <div className="text-xs text-zinc-500">@JakeSummersFM</div>
@@ -552,7 +572,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* Twitch icon removed due to missing component */}
+                <Twitch className="w-5 h-5 text-purple-400" />
                 <div>
                   <div className="font-medium text-sm">Twitch</div>
                   <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
@@ -580,7 +600,7 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3
+        Made with ❤️ for the Football Manager community • V3.2
       </footer>
 
       {/* Player Modal */}

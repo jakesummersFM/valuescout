@@ -48,13 +48,34 @@ export default function FMValueScoutV3() {
   const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   const recommendedColumns: Record<string, string[]> = {
-    'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc'],
-    'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Tck C', 'Interceptions', 'Itc', 'Key', 'Key Passes', 'Assists'],
-    'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Key', 'Key Passes', 'Assists'],
-    'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG'],
-    'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key', 'Key Passes', 'Shots', 'xG', 'Cr C'],
-    'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Shots', 'xG'],
-    'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Sv %', 'Svh', 'Clean Sheets', 'Save %'],
+    'Central Defender': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Tackles (Tck C)', 'Interceptions (Itc)'
+    ],
+    'Wing Back': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists'
+    ],
+    'Centre Mid': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Tackles (Tck C)', 'Key Passes (Key)', 'Assists'
+    ],
+    'Attacking Mid': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'
+    ],
+    'Winger': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG', 'Crosses (Cr C)'
+    ],
+    'Striker': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Goals', 'Assists', 'Shots', 'xG'
+    ],
+    'Goalkeeper': [
+      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
+      'Save % (Sv %)', 'Clean Sheets'
+    ],
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
@@ -70,7 +91,6 @@ export default function FMValueScoutV3() {
       if (p.includes('st') || p.includes('cf')) return 'Striker';
     }
 
-    // Smart fallback when Position is missing
     if (row) {
       const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
       const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
@@ -238,12 +258,12 @@ export default function FMValueScoutV3() {
         if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `⚠️ Position column was missing in some rows. The app tried to guess based on stats, but for best results always include the Position column when exporting.` 
+            text: `⚠️ Position column was missing in some rows. The app tried to guess, but for best results always include the Position column.` 
           });
         } else if (lowScoreCount > parsedPlayers.length * 0.5) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored around 48. This usually means key stats are missing. Use the Downloadable Filters tab for recommended columns.` 
+            text: `Many players scored around 48. This usually means key stats are missing. Check the Downloadable Filters tab for recommended columns.` 
           });
         } else {
           setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Scores should now spread nicely.` });
@@ -550,11 +570,11 @@ export default function FMValueScoutV3() {
             </div>
           )}
 
-          {/* Filters Tab */}
+          {/* Filters Tab — Cleaned up */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
-              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for the best scoring spread.</p>
+              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns. Abbreviations in brackets are what often appear in the CSV.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.keys(recommendedColumns).map((pos) => (

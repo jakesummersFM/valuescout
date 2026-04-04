@@ -48,34 +48,13 @@ export default function FMValueScoutV3() {
   const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   const recommendedColumns: Record<string, string[]> = {
-    'Central Defender': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Tackles (Tck C)', 'Interceptions (Itc)'
-    ],
-    'Wing Back': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists'
-    ],
-    'Centre Mid': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Tackles (Tck C)', 'Key Passes (Key)', 'Assists'
-    ],
-    'Attacking Mid': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'
-    ],
-    'Winger': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG', 'Crosses (Cr C)'
-    ],
-    'Striker': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Goals', 'Assists', 'Shots', 'xG'
-    ],
-    'Goalkeeper': [
-      'Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes',
-      'Save % (Sv %)', 'Clean Sheets'
-    ],
+    'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
+    'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists'],
+    'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Key Passes (Key)', 'Assists'],
+    'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'],
+    'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG', 'Crosses (Cr C)'],
+    'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Shots', 'xG'],
+    'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Save % (Sv %)', 'Clean Sheets'],
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
@@ -84,25 +63,26 @@ export default function FMValueScoutV3() {
       const p = pos.toLowerCase();
       if (p.includes('gk')) return 'GK';
       if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
-      if (p.includes('dc') || p.includes('cb')) return 'Central Defender';
+      if (p.includes('d (c)') || p.includes('dc') || p.includes('cb') || p.includes('centre back') || p.includes('central defender')) return 'Central Defender';
       if (p.includes('cm') || p.includes('dm')) return 'Centre Mid';
       if (p.includes('am')) return 'Attacking Mid';
       if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
       if (p.includes('st') || p.includes('cf')) return 'Striker';
     }
 
+    // Smart fallback using stats
     if (row) {
       const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
       const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
       const key = parseFloat(row['Key'] || row['Key Passes'] || '0');
       const assists = parseFloat(row['Assists'] || '0');
 
-      if (tck > 20 || itc > 30) return 'Central Defender';
-      if ((tck > 15 || itc > 20) && key > 10) return 'Wing Back';
-      if (key > 25 || assists > 5) return 'Attacking Mid';
-      if (key > 15) return 'Centre Mid';
+      if (tck > 15 || itc > 25) return 'Central Defender';
+      if ((tck > 12 || itc > 20) && key > 8) return 'Wing Back';
+      if (key > 20 || assists > 4) return 'Attacking Mid';
+      if (key > 12) return 'Centre Mid';
     }
-    return 'Centre Mid';
+    return 'Central Defender'; // safer default for defender-heavy CSVs
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -238,8 +218,8 @@ export default function FMValueScoutV3() {
               valueScore: score,
               keyStat: group === 'GK' 
                 ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
-                : group === 'Wing Back' 
-                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'} | Key: ${row['Key'] || '-'}` 
+                : group === 'Wing Back' || group === 'Central Defender'
+                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
               wage: row.Wage || '£0',
@@ -258,12 +238,12 @@ export default function FMValueScoutV3() {
         if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `⚠️ Position column was missing in some rows. The app tried to guess, but for best results always include the Position column.` 
+            text: `⚠️ Position detection improved, but some rows had complex positions. For best results, export with simple Position (e.g. "D (C)").` 
           });
-        } else if (lowScoreCount > parsedPlayers.length * 0.5) {
+        } else if (lowScoreCount > parsedPlayers.length * 0.4) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored around 48. This usually means key stats are missing. Check the Downloadable Filters tab for recommended columns.` 
+            text: `Many players scored around 48. Make sure you included Tackles (Tck C), Interceptions (Itc), and Position.` 
           });
         } else {
           setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Scores should now spread nicely.` });
@@ -316,7 +296,7 @@ export default function FMValueScoutV3() {
 
   const downloadColumns = (position: string) => {
     const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout V3.5)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const content = `Recommended columns for ${position} (FM Value Scout V3.7)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -403,7 +383,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3.5 • Moneyball for Football Manager</div>
+              <div className="text-xs text-violet-400 -mt-1">V3.7 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -480,9 +460,8 @@ export default function FMValueScoutV3() {
                   <div className="flex items-start gap-4">
                     <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-left text-sm text-amber-200">
-                      <strong>Common Issue:</strong> Missing <strong>Position</strong> column often causes low scores (48).<br />
-                      The app now tries to guess from stats, but for best results always include the <strong>Position</strong> column when exporting.<br /><br />
-                      Currency ($) and wage format (p/w or p/a) are handled automatically.
+                      <strong>Common Issue:</strong> Complex Position values like "D (C), DM, M (C)" can cause low scores.<br />
+                      The app now handles them better, but for perfect results use simple positions (e.g. "D (C)") when possible.
                     </div>
                   </div>
                 </div>
@@ -493,7 +472,7 @@ export default function FMValueScoutV3() {
                     <div className="bg-zinc-800 p-4 rounded-2xl">
                       <strong>Best Time:</strong> Export after 20–25+ games for the best score spread.
                     </div>
-                    <p><strong>Pro Tip:</strong> Filter to one position only and include the Position column + recommended stats.</p>
+                    <p><strong>Pro Tip:</strong> Filter to one position only and include Position + key defensive/attacking stats.</p>
                   </div>
                 </details>
 
@@ -570,11 +549,11 @@ export default function FMValueScoutV3() {
             </div>
           )}
 
-          {/* Filters Tab — Cleaned up */}
+          {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
               <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
-              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns. Abbreviations in brackets are what often appear in the CSV.</p>
+              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for the best scoring spread.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.keys(recommendedColumns).map((pos) => (
@@ -662,7 +641,7 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3.5
+        Made with ❤️ for the Football Manager community • V3.7
       </footer>
 
       {/* Player Modal */}

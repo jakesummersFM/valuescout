@@ -4,6 +4,8 @@ import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Player {
   id: number;
@@ -35,7 +37,7 @@ const positionFilters = [
   { label: 'Striker', value: 'Striker' },
 ];
 
-export default function FMValueScoutV3() {
+export default function FMValueScoutV4() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
@@ -58,6 +60,19 @@ export default function FMValueScoutV3() {
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
+  // Demo data for each position (realistic examples)
+  const demoData = {
+    'Central Defender': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Tck C;Itc
+Mateo Andačić;D (C);28;£22K - £230K;£625 p/w;Premijer Liga BiH;3848;47;111
+Mario Zebić;D (C);30;£60K - £600K;£100 p/w;Superliga;3869;32;137`,
+    'Wing Back': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Tck C;Itc;Key;Assists
+Mads Roerslev;Right Back;27;£9.4M - £11.5M;£30K p/w;Sky Bet Championship;2844;74;111;51;6`,
+    'Striker': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Goals;Assists;Shots;xG
+Nils Stettin;Striker;24;£9K - £85K;£750 p/w;J1 League;3120;24;8;72;7.84`,
+    'Goalkeeper': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Sv %;Clean Sheets
+Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
+  };
+
   const getPositionGroup = (pos: string, row?: any): string => {
     if (pos && pos.trim() !== '') {
       const p = pos.toLowerCase();
@@ -70,7 +85,6 @@ export default function FMValueScoutV3() {
       if (p.includes('st') || p.includes('cf')) return 'Striker';
     }
 
-    // Smart fallback using stats
     if (row) {
       const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
       const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
@@ -82,7 +96,7 @@ export default function FMValueScoutV3() {
       if (key > 20 || assists > 4) return 'Attacking Mid';
       if (key > 12) return 'Centre Mid';
     }
-    return 'Central Defender'; // safer default for defender-heavy CSVs
+    return 'Central Defender';
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -219,7 +233,7 @@ export default function FMValueScoutV3() {
               keyStat: group === 'GK' 
                 ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
                 : group === 'Wing Back' || group === 'Central Defender'
-                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'}` 
+                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'} | Key: ${row['Key'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
               wage: row.Wage || '£0',
@@ -238,12 +252,12 @@ export default function FMValueScoutV3() {
         if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `⚠️ Position detection improved, but some rows had complex positions. For best results, export with simple Position (e.g. "D (C)").` 
+            text: `⚠️ Some rows had missing or complex Position data. The app used smart detection – for perfect results include a clear Position column.` 
           });
         } else if (lowScoreCount > parsedPlayers.length * 0.4) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `Many players scored around 48. Make sure you included Tackles (Tck C), Interceptions (Itc), and Position.` 
+            text: `Many players scored around 48. Try adding more key stats using the Downloadable Filters tab.` 
           });
         } else {
           setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Scores should now spread nicely.` });
@@ -263,6 +277,16 @@ export default function FMValueScoutV3() {
       return;
     }
     parseAndProcessCSV(file);
+  };
+
+  // Load Demo Data
+  const loadDemoData = (position: string) => {
+    const csvText = demoData[position as keyof typeof demoData];
+    if (!csvText) return;
+
+    const blob = new Blob([csvText], { type: 'text/csv' });
+    const demoFile = new File([blob], `${position}-demo.csv`, { type: 'text/csv' });
+    handleFileUpload(demoFile);
   };
 
   const filteredPlayers = useMemo(() => {
@@ -288,6 +312,36 @@ export default function FMValueScoutV3() {
     document.body.removeChild(link);
   };
 
+  // New: PDF Export for shortlist
+  const exportShortlistPDF = () => {
+    if (shortlist.length === 0) return;
+
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("FM Value Scout - Shortlist", 14, 20);
+
+    const tableData = shortlist.map(p => [
+      p.name,
+      p.position,
+      p.age.toString(),
+      p.league,
+      p.valueScore.toString(),
+      p.transferValue,
+      p.wage
+    ]);
+
+    autoTable(doc, {
+      startY: 30,
+      head: [['Player', 'Position', 'Age', 'League', 'Value Score', 'Transfer Value', 'Wage']],
+      body: tableData,
+      theme: 'grid',
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [139, 92, 246] }
+    });
+
+    doc.save("FM_Value_Scout_Shortlist.pdf");
+  };
+
   const copyColumns = (position: string) => {
     const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
     navigator.clipboard.writeText(cols.join(', '));
@@ -296,7 +350,7 @@ export default function FMValueScoutV3() {
 
   const downloadColumns = (position: string) => {
     const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout V3.7)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
+    const content = `Recommended columns for ${position} (FM Value Scout V4)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -383,7 +437,7 @@ export default function FMValueScoutV3() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
             <div>
               <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V3.7 • Moneyball for Football Manager</div>
+              <div className="text-xs text-violet-400 -mt-1">V4 Phase 1 • Moneyball for Football Manager</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -398,7 +452,14 @@ export default function FMValueScoutV3() {
               disabled={shortlist.length === 0}
               className="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
             >
-              <Download className="w-5 h-5" /> Export Shortlist ({shortlist.length})
+              <Download className="w-5 h-5" /> Export CSV Shortlist ({shortlist.length})
+            </button>
+            <button 
+              onClick={exportShortlistPDF}
+              disabled={shortlist.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
+            >
+              <FileText className="w-5 h-5" /> Export PDF
             </button>
           </div>
         </div>
@@ -460,21 +521,27 @@ export default function FMValueScoutV3() {
                   <div className="flex items-start gap-4">
                     <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
                     <div className="text-left text-sm text-amber-200">
-                      <strong>Common Issue:</strong> Complex Position values like "D (C), DM, M (C)" can cause low scores.<br />
-                      The app now handles them better, but for perfect results use simple positions (e.g. "D (C)") when possible.
+                      <strong>Smart Fix Active:</strong> Missing or complex Position? The app now guesses intelligently.<br />
+                      Currency and wage format are handled automatically.
                     </div>
                   </div>
                 </div>
 
-                <details className="text-left text-sm text-zinc-400 mb-8 max-w-md mx-auto cursor-pointer">
-                  <summary className="font-medium hover:text-violet-400 mb-2">How to Export the Perfect CSV</summary>
-                  <div className="mt-3 text-xs space-y-4">
-                    <div className="bg-zinc-800 p-4 rounded-2xl">
-                      <strong>Best Time:</strong> Export after 20–25+ games for the best score spread.
-                    </div>
-                    <p><strong>Pro Tip:</strong> Filter to one position only and include Position + key defensive/attacking stats.</p>
+                {/* Demo Data Buttons */}
+                <div className="mb-8">
+                  <p className="text-sm text-zinc-400 mb-3">Or try demo data (great for testing):</p>
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    {Object.keys(demoData).map((pos) => (
+                      <button
+                        key={pos}
+                        onClick={() => loadDemoData(pos)}
+                        className="bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded-2xl text-sm transition flex items-center gap-2"
+                      >
+                        Load {pos} Demo
+                      </button>
+                    ))}
                   </div>
-                </details>
+                </div>
 
                 <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer transition inline-block flex items-center justify-center gap-3 mx-auto">
                   {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
@@ -509,10 +576,16 @@ export default function FMValueScoutV3() {
 
               {players.length > 0 && (
                 <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden mt-8">
-                  <div className="px-8 py-6 border-b border-violet-900/50">
+                  <div className="px-8 py-6 border-b border-violet-900/50 flex justify-between items-center">
                     <h3 className="text-xl font-semibold text-white">
                       {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
                     </h3>
+                    <button
+                      onClick={exportShortlistPDF}
+                      className="text-sm flex items-center gap-2 text-emerald-400 hover:text-emerald-300"
+                    >
+                      <FileText className="w-4 h-4" /> Export PDF
+                    </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -567,7 +640,7 @@ export default function FMValueScoutV3() {
                         onClick={() => copyColumns(pos)} 
                         className="flex-1 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 py-3 rounded-2xl transition"
                       >
-                        <Copy className="w-4 h-4" /> Copy Columns
+                        <Copy className="w-4 h-4" /> Copy
                       </button>
                       <button 
                         onClick={() => downloadColumns(pos)} 
@@ -601,7 +674,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                <span className="w-5 h-5 text-sky-400">🐦</span>
+                {/* <Twitter className="w-5 h-5 text-sky-400" /> */}
                 <div>
                   <div className="font-medium text-sm">Twitter / X</div>
                   <div className="text-xs text-zinc-500">@JakeSummersFM</div>
@@ -613,7 +686,7 @@ export default function FMValueScoutV3() {
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                <span className="w-5 h-5 text-purple-400">🎮</span>
+                {/* <Twitch className="w-5 h-5 text-purple-400" /> */}
                 <div>
                   <div className="font-medium text-sm">Twitch</div>
                   <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
@@ -641,7 +714,7 @@ export default function FMValueScoutV3() {
       </div>
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V3.7
+        Made with ❤️ for the Football Manager community • V4 Phase 1
       </footer>
 
       {/* Player Modal */}

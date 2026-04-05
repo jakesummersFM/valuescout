@@ -3,6 +3,18 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2 } from 'lucide-react';
+// Demo CSV data for each position
+const demoData: Record<string, string> = {
+  'Goalkeeper': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Save % (Sv %),Clean Sheets\nJohn Smith,GK,25,5,2000,Premier League,2700,78,12\nAlex Brown,GK,22,3,1500,La Liga,2500,82,10`,
+  'Central Defender': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc)\nMike Jones,Central Defender,27,12,3500,Bundesliga,2900,65,45\nSam Lee,Central Defender,24,8,2200,Serie A,2800,70,50`,
+  'CDM': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc),Key Passes (Key),Assists,Pas %\nChris Green,CDM,23,10,3000,Ligue 1,2600,55,40,18,6,89\nPat White,CDM,26,7,2100,Championship,2700,50,38,15,4,85`,
+  'Wing Back': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc),Key Passes (Key),Assists\nJamie Black,Wing Back,21,6,1800,Premier League,2400,40,30,12,5\nTaylor Gray,Wing Back,25,9,2500,Serie A,2600,45,32,14,7`,
+  'Centre Mid': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Key Passes (Key),Assists\nJordan Blue,Centre Mid,28,15,4000,Bundesliga,3000,30,22,8\nMorgan Red,Centre Mid,22,11,3200,La Liga,2700,28,20,7`,
+  'Attacking Mid': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Key Passes (Key),Shots,xG\nAlex Gold,Attacking Mid,24,18,5000,Premier League,2800,12,10,25,60,8.5\nCasey Silver,Attacking Mid,26,14,4200,Ligue 1,2700,10,8,22,55,7.9`,
+  'Winger': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Key Passes (Key),Shots,xG,Crosses (Cr C)\nRobin White,Winger,23,13,3700,Serie A,2600,8,9,20,50,6.2,40\nDrew Black,Winger,25,10,2900,Bundesliga,2500,7,7,18,45,5.8,35`,
+  'Striker': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Shots,xG\nChris Red,Striker,27,22,6000,Premier League,3000,20,6,80,15.2\nPat Blue,Striker,24,16,4800,La Liga,2800,17,5,70,13.8`,
+  'All Positions': `Name,Position,Age,Transfer Value,Wage,League,Minutes\nJohn Smith,GK,25,5,2000,Premier League,2700\nMike Jones,Central Defender,27,12,3500,Bundesliga,2900\nChris Green,CDM,23,10,3000,Ligue 1,2600\nJamie Black,Wing Back,21,6,1800,Premier League,2400\nJordan Blue,Centre Mid,28,15,4000,Bundesliga,3000\nAlex Gold,Attacking Mid,24,18,5000,Premier League,2800\nRobin White,Winger,23,13,3700,Serie A,2600\nChris Red,Striker,27,22,6000,Premier League,3000`
+};
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -31,6 +43,7 @@ const positionFilters = [
   { label: 'Goalkeeper', value: 'GK' },
   { label: 'Wing-Back', value: 'Wing Back' },
   { label: 'Central Defender', value: 'Central Defender' },
+  { label: 'CDM', value: 'CDM' },
   { label: 'Centre Mid', value: 'Centre Mid' },
   { label: 'Attacking Mid', value: 'Attacking Mid' },
   { label: 'Winger', value: 'Winger' },
@@ -51,6 +64,7 @@ export default function FMValueScoutV4() {
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
+    'CDM': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists', 'Pas %'],
     'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists'],
     'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Key Passes (Key)', 'Assists'],
     'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'],
@@ -60,26 +74,14 @@ export default function FMValueScoutV4() {
     'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
-  // Demo data for each position (realistic examples)
-  const demoData = {
-    'Central Defender': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Tck C;Itc
-Mateo Andačić;D (C);28;£22K - £230K;£625 p/w;Premijer Liga BiH;3848;47;111
-Mario Zebić;D (C);30;£60K - £600K;£100 p/w;Superliga;3869;32;137`,
-    'Wing Back': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Tck C;Itc;Key;Assists
-Mads Roerslev;Right Back;27;£9.4M - £11.5M;£30K p/w;Sky Bet Championship;2844;74;111;51;6`,
-    'Striker': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Goals;Assists;Shots;xG
-Nils Stettin;Striker;24;£9K - £85K;£750 p/w;J1 League;3120;24;8;72;7.84`,
-    'Goalkeeper': `Player;Position;Age;Transfer Value;Wage;Division;Minutes;Sv %;Clean Sheets
-Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
-  };
-
   const getPositionGroup = (pos: string, row?: any): string => {
     if (pos && pos.trim() !== '') {
       const p = pos.toLowerCase();
       if (p.includes('gk')) return 'GK';
       if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
       if (p.includes('d (c)') || p.includes('dc') || p.includes('cb') || p.includes('centre back') || p.includes('central defender')) return 'Central Defender';
-      if (p.includes('cm') || p.includes('dm')) return 'Centre Mid';
+      if (p.includes('dm') || (p.includes('d') && p.includes('dm')) || p.includes('defensive mid')) return 'CDM';
+      if (p.includes('cm') || p.includes('centre mid')) return 'Centre Mid';
       if (p.includes('am')) return 'Attacking Mid';
       if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
       if (p.includes('st') || p.includes('cf')) return 'Striker';
@@ -91,12 +93,13 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
       const key = parseFloat(row['Key'] || row['Key Passes'] || '0');
       const assists = parseFloat(row['Assists'] || '0');
 
-      if (tck > 15 || itc > 25) return 'Central Defender';
+      if (tck > 20 || itc > 30) return 'Central Defender';
+      if ((tck > 18 || itc > 25) && key > 10) return 'CDM';
       if ((tck > 12 || itc > 20) && key > 8) return 'Wing Back';
       if (key > 20 || assists > 4) return 'Attacking Mid';
       if (key > 12) return 'Centre Mid';
     }
-    return 'Central Defender';
+    return 'Centre Mid';
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -130,6 +133,7 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
     const interceptions = per90(getNum(['Interceptions', 'Itc']));
     const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);
     const cleanSheets = getNum(['Clean Sheets']);
+    const passPct = getNum(['Pas %', 'Pass %', 'Passing %']);
 
     let performance = 0;
 
@@ -148,6 +152,10 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
         break;
       case 'Centre Mid':
         performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
+        break;
+      case 'CDM':
+        // Heavily defensive-focused for pure CDMs
+        performance = (tackles * 3.5) + (interceptions * 3.3) + (keyPasses * 2.2) + (passPct * 0.8) + (assists * 1.4);
         break;
       case 'Wing Back':
         performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1) + (goals * 1.6);
@@ -232,7 +240,7 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
               valueScore: score,
               keyStat: group === 'GK' 
                 ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
-                : group === 'Wing Back' || group === 'Central Defender'
+                : group === 'CDM' || group === 'Wing Back' || group === 'Central Defender'
                 ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'} | Key: ${row['Key'] || '-'}` 
                 : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
               transferValue: row['Transfer Value'] || row.Value || '£0',
@@ -252,7 +260,7 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
         if (missingPositionCount > 0) {
           setUploadMessage({ 
             type: 'warning', 
-            text: `⚠️ Some rows had missing or complex Position data. The app used smart detection – for perfect results include a clear Position column.` 
+            text: `⚠️ Some rows had missing or complex Position data. The app used smart detection – for best results include a clear Position column.` 
           });
         } else if (lowScoreCount > parsedPlayers.length * 0.4) {
           setUploadMessage({ 
@@ -279,7 +287,6 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
     parseAndProcessCSV(file);
   };
 
-  // Load Demo Data
   const loadDemoData = (position: string) => {
     const csvText = demoData[position as keyof typeof demoData];
     if (!csvText) return;
@@ -312,13 +319,12 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
     document.body.removeChild(link);
   };
 
-  // New: PDF Export for shortlist
   const exportShortlistPDF = () => {
     if (shortlist.length === 0) return;
 
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text("FM Value Scout - Shortlist", 14, 20);
+    doc.text("FM Value Scout V4 - Shortlist", 14, 20);
 
     const tableData = shortlist.map(p => [
       p.name,
@@ -527,7 +533,6 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
                   </div>
                 </div>
 
-                {/* Demo Data Buttons */}
                 <div className="mb-8">
                   <p className="text-sm text-zinc-400 mb-3">Or try demo data (great for testing):</p>
                   <div className="flex flex-wrap gap-3 justify-center">
@@ -674,7 +679,7 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* <Twitter className="w-5 h-5 text-sky-400" /> */}
+                {/* Twitter icon removed */}
                 <div>
                   <div className="font-medium text-sm">Twitter / X</div>
                   <div className="text-xs text-zinc-500">@JakeSummersFM</div>
@@ -686,7 +691,7 @@ Julen Agirrezabala;GK;29;£72M - £107M;£46.5K p/w;LaLiga;450;94;3`
                 target="_blank" 
                 className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
               >
-                {/* <Twitch className="w-5 h-5 text-purple-400" /> */}
+                {/* Twitch icon removed */}
                 <div>
                   <div className="font-medium text-sm">Twitch</div>
                   <div className="text-xs text-zinc-500">Live FM saves & scouting</div>

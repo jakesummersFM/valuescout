@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, GripVertical } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, HelpCircle, GripVertical, Trash2 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -49,11 +49,11 @@ export default function FMValueScoutV4Phase4() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [activeTab, setActiveTab] = useState<'upload' | 'filters' | 'squad' | 'compare'>('upload');
-  const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'upload' | 'howto' | 'filters' | 'squad' | 'compare'>('upload');
   const [balancedMode, setBalancedMode] = useState(false);
   const [squad, setSquad] = useState<Player[]>([]);
   const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
+  const [currentFormation, setCurrentFormation] = useState('4-3-3');
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
@@ -259,30 +259,46 @@ export default function FMValueScoutV4Phase4() {
   };
 
   const filteredPlayers = useMemo(() => {
-    return selectedPositionFilter === 'All' 
-      ? players 
-      : players.filter(p => p.position === selectedPositionFilter);
+    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
   }, [players, selectedPositionFilter]);
 
   const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) {
-      setShortlist([...shortlist, player]);
-    }
+    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
   };
 
   const removeFromShortlist = (id: number) => {
     setShortlist(shortlist.filter(p => p.id !== id));
   };
 
-  const addToComparison = (player: Player) => {
-    if (selectedForComparison.length < 4 && !selectedForComparison.find(p => p.id === player.id)) {
-      setSelectedForComparison([...selectedForComparison, player]);
+  // Squad Builder drag-and-drop handlers
+  const handleDragStart = (e: React.DragEvent, player: Player) => {
+    e.dataTransfer.setData('playerId', player.id.toString());
+  };
+
+  const handleDropOnSquad = (e: React.DragEvent) => {
+    e.preventDefault();
+    const playerId = parseInt(e.dataTransfer.getData('playerId'));
+    const player = shortlist.find(p => p.id === playerId);
+    if (player && !squad.find(p => p.id === player.id)) {
+      setSquad([...squad, player]);
     }
   };
 
-  const removeFromComparison = (id: number) => {
-    setSelectedForComparison(selectedForComparison.filter(p => p.id !== id));
+  const removeFromSquad = (id: number) => {
+    setSquad(squad.filter(p => p.id !== id));
   };
+
+  const squadStats = useMemo(() => {
+    if (squad.length === 0) return { avgScore: 0, totalWage: 0, avgAge: 0, gems: 0 };
+    const avgScore = (squad.reduce((sum, p) => sum + p.valueScore, 0) / squad.length).toFixed(1);
+    const totalWage = squad.reduce((sum, p) => {
+      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
+      return sum + wageNum;
+    }, 0);
+    const avgAge = (squad.reduce((sum, p) => sum + p.age, 0) / squad.length).toFixed(1);
+    const gems = squad.filter(p => p.badge.type === 'gem').length;
+    return { avgScore, totalWage: Math.round(totalWage), avgAge, gems };
+  }, [squad]);
 
   const exportShortlistCSV = () => {
     if (shortlist.length === 0) return;
@@ -311,26 +327,13 @@ export default function FMValueScoutV4Phase4() {
     doc.save("ValueScout_Shortlist.pdf");
   };
 
-  // Squad stats calculation
-  const squadStats = useMemo(() => {
-    if (squad.length === 0) return { avgScore: 0, totalWage: 0, avgAge: 0, gems: 0 };
-    const avgScore = (squad.reduce((sum, p) => sum + p.valueScore, 0) / squad.length).toFixed(1);
-    const totalWage = squad.reduce((sum, p) => {
-      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
-      return sum + wageNum;
-    }, 0);
-    const avgAge = (squad.reduce((sum, p) => sum + p.age, 0) / squad.length).toFixed(1);
-    const gems = squad.filter(p => p.badge.type === 'gem').length;
-    return { avgScore, totalWage: Math.round(totalWage), avgAge, gems };
-  }, [squad]);
-
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
     {
       accessorKey: 'name',
       header: 'Player',
       cell: ({ row }: any) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 draggable" draggable onDragStart={(e) => handleDragStart(e, row.original)}>
           <span className="text-2xl">{row.original.nationality}</span>
           <div>
             <div className="font-semibold">{row.original.name}</div>
@@ -370,13 +373,10 @@ export default function FMValueScoutV4Phase4() {
           <button onClick={() => addToShortlist(row.original)} disabled={shortlist.some(p => p.id === row.original.id)} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">
             <Plus className="w-4 h-4" /> Shortlist
           </button>
-          <button onClick={() => addToComparison(row.original)} disabled={selectedForComparison.length >= 4 || selectedForComparison.some(p => p.id === row.original.id)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">
-            Compare
-          </button>
         </div>
       ),
     },
-  ], [shortlist, selectedForComparison]);
+  ], [shortlist]);
 
   const table = useReactTable({
     data: filteredPlayers,
@@ -416,7 +416,7 @@ export default function FMValueScoutV4Phase4() {
         {/* Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-violet-300">Filter</h3>
+            <h3 className="font-semibold mb-4 text-violet-300">Position Filter</h3>
             <div className="space-y-2">
               {positionFilters.map((f) => (
                 <button
@@ -430,7 +430,12 @@ export default function FMValueScoutV4Phase4() {
             </div>
 
             <div className="mt-8 flex items-center gap-2">
-              <input type="checkbox" checked={balancedMode} onChange={(e) => setBalancedMode(e.target.checked)} className="accent-violet-500" />
+              <input 
+                type="checkbox" 
+                checked={balancedMode} 
+                onChange={(e) => setBalancedMode(e.target.checked)} 
+                className="accent-violet-500" 
+              />
               <label className="text-sm">Balanced Mode (less wonderkid inflation)</label>
             </div>
           </div>
@@ -439,13 +444,17 @@ export default function FMValueScoutV4Phase4() {
         {/* Main Content */}
         <div className="flex-1">
           <div className="flex border-b border-violet-900/50 mb-8">
-            {['upload', 'filters', 'squad', 'compare'].map((tab) => (
+            {['upload', 'howto', 'filters', 'squad', 'compare'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
-                className={`px-8 py-4 font-medium transition ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`px-8 py-4 font-medium transition flex items-center gap-2 ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
               >
-                {tab === 'upload' ? 'Upload' : tab === 'filters' ? 'Filters' : tab === 'squad' ? 'Squad Builder' : 'Compare'}
+                {tab === 'upload' && 'Upload CSV'}
+                {tab === 'howto' && <><HelpCircle className="w-4 h-4" /> How to Use</>}
+                {tab === 'filters' && 'Export Filters'}
+                {tab === 'squad' && <><Users className="w-4 h-4" /> Squad Builder</>}
+                {tab === 'compare' && 'Compare'}
               </button>
             ))}
           </div>
@@ -453,18 +462,19 @@ export default function FMValueScoutV4Phase4() {
           {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
-              {/* Drag & Drop Area + Demo Buttons + Balanced Mode already in sidebar */}
-              <div className="bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-12 text-center" 
-                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} 
-                   onDragLeave={() => setIsDragging(false)} 
-                   onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
+              <div 
+                className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-12 text-center transition-all ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}
+              >
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
-                <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
-                <label className="bg-violet-600 hover:bg-violet-500 px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
+                <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
+                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
                   Choose CSV File
                   <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
                 </label>
-                {uploadMessage && <div className={`mt-6 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
+                {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
               </div>
 
               {players.length > 0 && (
@@ -498,6 +508,62 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
+          {/* How to Use Tab - Expanded */}
+          {activeTab === 'howto' && (
+            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8 prose prose-invert max-w-none">
+              <h2 className="text-3xl font-bold mb-8 text-white">How to Use FM Value Scout V4</h2>
+
+              <div className="space-y-12">
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">1. Export the Perfect CSV from FM</h3>
+                  <p className="text-zinc-400 mb-4">Always export <strong>one position at a time</strong> for the most accurate scores.</p>
+                  <div className="bg-zinc-800 rounded-2xl p-6 text-sm">
+                    Recommended columns (use the Filters tab to copy):
+                    <ul className="mt-4 space-y-1 text-emerald-400 font-mono">
+                      <li>• Name, Position, Age, Transfer Value, Wage, League, Minutes</li>
+                      <li>• For Strikers: Goals, Assists, Shots, xG</li>
+                      <li>• For CDMs / Defenders: Tackles (Tck C), Interceptions (Itc), Key Passes, Pas %</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">2. Upload &amp; Get Results</h3>
+                  <p className="text-zinc-400">Drag and drop your CSV or click to upload. The app will automatically detect positions and calculate Moneyball-style Value Scores (48–97).</p>
+                  <ul className="mt-4 list-disc list-inside text-zinc-400 space-y-2">
+                    <li>Use <strong>Balanced Mode</strong> if you see too many 99s on wonderkids.</li>
+                    <li>Minimum 1,200 minutes recommended for reliable scores.</li>
+                    <li>Click any player to see the breakdown bars (Performance, Value for Money, Age).</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">3. New Phase 4 Features</h3>
+                  <ul className="text-zinc-400 space-y-3">
+                    <li><strong>Squad Builder</strong>: Drag players into a formation and see real-time squad stats (avg score, total wage, avg age, hidden gems).</li>
+                    <li><strong>Compare</strong>: Select up to 4 players to compare side-by-side.</li>
+                    <li><strong>Export</strong>: Save your shortlist as CSV or PDF.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">4. Tips for Best Results</h3>
+                  <ul className="text-zinc-400 space-y-2">
+                    <li>Filter to one position in FM before exporting</li>
+                    <li>Add a minimum minutes filter (1,200+ is ideal)</li>
+                    <li>Use Balanced Mode when scouting lots of young cheap players</li>
+                    <li>Check the breakdown bars — high Age + Value scores on low-minute players may be inflated</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-12 text-center text-sm text-zinc-400">
+                Need more help? Join the Discord or reply on Twitter @JakeSummersFM<br />
+                The tool is 100% free and improves with your feedback ❤️
+              </div>
+            </div>
+          )}
+
           {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
@@ -520,35 +586,84 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
-          {/* Squad Builder Tab */}
+          {/* Squad Builder Tab - Improved */}
           {activeTab === 'squad' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
+                <select 
+                  value={currentFormation} 
+                  onChange={(e) => setCurrentFormation(e.target.value)}
+                  className="bg-zinc-800 border border-violet-900/50 rounded-2xl px-4 py-2 text-sm"
+                >
+                  {formations.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <button onClick={() => setSquad([])} className="text-red-400 flex items-center gap-2 text-sm">
+                  <Trash2 className="w-4 h-4" /> Clear Squad
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Formation Pitch */}
                 <div className="lg:col-span-2">
-                  <div className="bg-zinc-950 border border-violet-900/50 rounded-3xl p-6 min-h-[400px]">
-                    <p className="text-zinc-400 mb-4">Drag players from shortlist here</p>
-                    <div className="grid grid-cols-5 gap-3">
-                      {squad.map((player, index) => (
-                        <div key={index} className="bg-zinc-800 p-4 rounded-2xl text-center relative">
-                          <button onClick={() => setSquad(squad.filter((_, i) => i !== index))} className="absolute top-2 right-2 text-red-400">×</button>
-                          <div className="font-medium text-sm">{player.name}</div>
-                          <div className="text-xs text-emerald-400">{player.valueScore}</div>
+                  <div 
+                    className="bg-emerald-950 border-2 border-emerald-700 rounded-3xl p-8 min-h-[420px] relative"
+                    onDrop={handleDropOnSquad}
+                    onDragOver={(e) => e.preventDefault()}
+                  >
+                    <div className="grid grid-cols-5 gap-4 h-full">
+                      {/* Simplified formation slots - you can expand this further if needed */}
+                      {Array.from({ length: 11 }).map((_, i) => (
+                        <div key={i} className="bg-zinc-900/70 border border-emerald-600 rounded-2xl flex items-center justify-center text-xs text-emerald-300 font-medium">
+                          Slot {i+1}
                         </div>
                       ))}
                     </div>
+                    <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-emerald-400 text-sm">Drop players here from shortlist</p>
                   </div>
                 </div>
+
+                {/* Squad Stats */}
                 <div>
-                  <div className="bg-zinc-800 rounded-3xl p-6">
-                    <h3 className="font-semibold mb-4">Squad Stats</h3>
-                    <div className="space-y-4 text-sm">
-                      <div>Average Score: <span className="font-mono text-emerald-400">{squadStats.avgScore}</span></div>
-                      <div>Total Wage: <span className="font-mono">£{squadStats.totalWage}k</span></div>
-                      <div>Average Age: <span className="font-mono">{squadStats.avgAge}</span></div>
-                      <div>Hidden Gems: <span className="font-mono text-amber-400">{squadStats.gems}</span></div>
+                  <div className="bg-zinc-800 rounded-3xl p-6 sticky top-8">
+                    <h3 className="font-semibold mb-6">Squad Stats</h3>
+                    <div className="space-y-6 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Average Score</span>
+                        <span className="font-mono text-emerald-400 text-xl">{squadStats.avgScore}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Total Wage</span>
+                        <span className="font-mono">£{squadStats.totalWage}k p/w</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Average Age</span>
+                        <span className="font-mono">{squadStats.avgAge}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Hidden Gems</span>
+                        <span className="font-mono text-amber-400">{squadStats.gems} 💎</span>
+                      </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Shortlist players ready for drag */}
+              <div className="mt-8">
+                <h4 className="text-sm text-zinc-400 mb-3">Your Shortlist (drag to formation)</h4>
+                <div className="flex flex-wrap gap-3">
+                  {shortlist.map((player) => (
+                    <div 
+                      key={player.id} 
+                      draggable 
+                      onDragStart={(e) => handleDragStart(e, player)}
+                      className="bg-zinc-800 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-grab text-sm"
+                    >
+                      <span>{player.name}</span>
+                      <span className="font-mono text-emerald-400">{player.valueScore}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -582,8 +697,8 @@ export default function FMValueScoutV4Phase4() {
         {/* About Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-violet-300">Jake Summers FM</h3>
-            <p className="text-sm text-zinc-400 mb-6">Creator of FM Value Scout. Helping the FM community find real value.</p>
+            <h3 className="font-semibold mb-4 text-violet-300">Jake Summers FM ✍️</h3>
+            <p className="text-sm text-zinc-400 mb-6">Creator of FM Value Scout V4. Helping the community find real value in Football Manager.</p>
             <div className="space-y-3">
               <a href="https://twitter.com/JakeSummersFM" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
                 <span className="w-5 h-5 text-sky-400">🐦</span> @JakeSummersFM
@@ -599,37 +714,43 @@ export default function FMValueScoutV4Phase4() {
         </div>
       </div>
 
-      <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500">
-        Made with ❤️ for the FM community •
+      <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
+        Made with ❤️ for the FM community • Phase 4
       </footer>
 
-      {/* Player Modal (simplified version from before) */}
+      {/* Player Modal */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100]">
-          <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-auto">
-            <div className="p-8 border-b border-violet-900/50 flex justify-between">
-              <div>
-                <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
-                <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league}</p>
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
+          <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
+            <div className="p-8 border-b border-violet-900/50 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <span className="text-5xl">{selectedPlayer.nationality}</span>
+                <div>
+                  <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
+                  <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
+                </div>
               </div>
-              <button onClick={() => setSelectedPlayer(null)}><X className="w-8 h-8" /></button>
+              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
+                <X className="w-8 h-8" />
+              </button>
             </div>
             <div className="p-8">
               <div className="text-center mb-10">
                 <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
+                <div className="text-xl text-zinc-400">Value Score</div>
               </div>
-              <div className="space-y-8">
+              <div className="space-y-8 mb-12">
                 <div>
-                  <div className="flex justify-between mb-2"><span>Performance</span><span>{selectedPlayer.perfPercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-emerald-500" style={{width: `${selectedPlayer.perfPercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Performance</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2"><span>Value for Money</span><span>{selectedPlayer.valuePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-violet-500" style={{width: `${selectedPlayer.valuePercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2"><span>Age Factor</span><span>{selectedPlayer.agePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-purple-500" style={{width: `${selectedPlayer.agePercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
                 </div>
               </div>
             </div>

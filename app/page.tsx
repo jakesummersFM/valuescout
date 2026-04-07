@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, HelpCircle, GripVertical, Trash2 } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, HelpCircle, Trash2 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -38,12 +38,12 @@ const positionFilters = [
   { label: 'ST', value: 'Striker' },
 ];
 
-const formations = ['4-3-3', '4-2-3-1', '4-4-2', '3-5-2', '3-4-3'];
-
 export default function FMValueScoutV4Phase4() {
+
   const [players, setPlayers] = useState<Player[]>([]);
-  const [shortlist, setShortlist] = useState<Player[]>([]);
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
+  const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
+  const [shortlist, setShortlist] = useState<Player[]>([]);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -52,8 +52,36 @@ export default function FMValueScoutV4Phase4() {
   const [activeTab, setActiveTab] = useState<'upload' | 'howto' | 'filters' | 'squad' | 'compare'>('upload');
   const [balancedMode, setBalancedMode] = useState(false);
   const [squad, setSquad] = useState<Player[]>([]);
-  const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
-  const [currentFormation, setCurrentFormation] = useState('4-3-3');
+
+  // Memoized filtered players for table
+  const filteredPlayers = useMemo(() => {
+    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
+  }, [players, selectedPositionFilter]);
+
+
+
+
+
+
+  // Table instance for TanStack Table
+  const table = useReactTable({
+    data: filteredPlayers,
+    columns: useMemo(() => [
+      { accessorKey: 'rank', header: 'Rank' },
+      { accessorKey: 'name', header: 'Name' },
+      { accessorKey: 'position', header: 'Position' },
+      { accessorKey: 'age', header: 'Age' },
+      { accessorKey: 'league', header: 'League' },
+      { accessorKey: 'valueScore', header: 'Score' },
+      { accessorKey: 'transferValue', header: 'Value' },
+      { accessorKey: 'wage', header: 'Wage' },
+    ], []),
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    debugTable: false,
+  });
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
@@ -258,47 +286,10 @@ export default function FMValueScoutV4Phase4() {
     parseAndProcessCSV(file);
   };
 
-  const filteredPlayers = useMemo(() => {
-    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
-  }, [players, selectedPositionFilter]);
 
   const addToShortlist = (player: Player) => {
     if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
   };
-
-  const removeFromShortlist = (id: number) => {
-    setShortlist(shortlist.filter(p => p.id !== id));
-  };
-
-  // Squad Builder drag-and-drop handlers
-  const handleDragStart = (e: React.DragEvent, player: Player) => {
-    e.dataTransfer.setData('playerId', player.id.toString());
-  };
-
-  const handleDropOnSquad = (e: React.DragEvent) => {
-    e.preventDefault();
-    const playerId = parseInt(e.dataTransfer.getData('playerId'));
-    const player = shortlist.find(p => p.id === playerId);
-    if (player && !squad.find(p => p.id === player.id)) {
-      setSquad([...squad, player]);
-    }
-  };
-
-  const removeFromSquad = (id: number) => {
-    setSquad(squad.filter(p => p.id !== id));
-  };
-
-  const squadStats = useMemo(() => {
-    if (squad.length === 0) return { avgScore: 0, totalWage: 0, avgAge: 0, gems: 0 };
-    const avgScore = (squad.reduce((sum, p) => sum + p.valueScore, 0) / squad.length).toFixed(1);
-    const totalWage = squad.reduce((sum, p) => {
-      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
-      return sum + wageNum;
-    }, 0);
-    const avgAge = (squad.reduce((sum, p) => sum + p.age, 0) / squad.length).toFixed(1);
-    const gems = squad.filter(p => p.badge.type === 'gem').length;
-    return { avgScore, totalWage: Math.round(totalWage), avgAge, gems };
-  }, [squad]);
 
   const exportShortlistCSV = () => {
     if (shortlist.length === 0) return;
@@ -326,66 +317,6 @@ export default function FMValueScoutV4Phase4() {
     });
     doc.save("ValueScout_Shortlist.pdf");
   };
-
-  const columns = React.useMemo(() => [
-    { accessorKey: 'rank', header: 'Rank' },
-    {
-      accessorKey: 'name',
-      header: 'Player',
-      cell: ({ row }: any) => (
-        <div className="flex items-center gap-3 draggable" draggable onDragStart={(e) => handleDragStart(e, row.original)}>
-          <span className="text-2xl">{row.original.nationality}</span>
-          <div>
-            <div className="font-semibold">{row.original.name}</div>
-            <div className="text-xs text-zinc-500">{row.original.position} • {row.original.league}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'valueScore',
-      header: 'Value Score',
-      cell: ({ row }: any) => {
-        const score = row.original.valueScore;
-        const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-violet-500' : 'bg-orange-500';
-        return (
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-3 bg-zinc-800 rounded-full overflow-hidden">
-              <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
-            </div>
-            <div className="font-mono font-bold text-lg">{score}</div>
-            {row.original.badge.icon && <span title={row.original.badge.label}>{row.original.badge.icon}</span>}
-          </div>
-        );
-      },
-    },
-    { accessorKey: 'keyStat', header: 'Key Stat' },
-    { accessorKey: 'transferValue', header: 'Value' },
-    { accessorKey: 'wage', header: 'Wage' },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }: any) => (
-        <div className="flex gap-2">
-          <button onClick={() => setSelectedPlayer(row.original)} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm flex items-center gap-2">
-            <Eye className="w-4 h-4" /> View
-          </button>
-          <button onClick={() => addToShortlist(row.original)} disabled={shortlist.some(p => p.id === row.original.id)} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" /> Shortlist
-          </button>
-        </div>
-      ),
-    },
-  ], [shortlist]);
-
-  const table = useReactTable({
-    data: filteredPlayers,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
 
   return (
     <div className="min-h-screen bg-[#0F0A1F] text-zinc-100 flex flex-col">
@@ -481,9 +412,9 @@ export default function FMValueScoutV4Phase4() {
                 <div className="mt-8 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
                   <table className="w-full">
                     <thead>
-                      {table.getHeaderGroups().map(headerGroup => (
+                      {table.getHeaderGroups().map((headerGroup: any) => (
                         <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
-                          {headerGroup.headers.map(header => (
+                          {headerGroup.headers.map((header: any) => (
                             <th key={header.id} className="px-8 py-5 text-left text-sm font-medium text-zinc-400">
                               {flexRender(header.column.columnDef.header, header.getContext())}
                             </th>
@@ -492,9 +423,9 @@ export default function FMValueScoutV4Phase4() {
                       ))}
                     </thead>
                     <tbody>
-                      {table.getRowModel().rows.map(row => (
+                      {table.getRowModel().rows.map((row: any) => (
                         <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30">
-                          {row.getVisibleCells().map(cell => (
+                          {row.getVisibleCells().map((cell: any) => (
                             <td key={cell.id} className="px-8 py-6">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
@@ -508,7 +439,7 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
-          {/* How to Use Tab - Expanded */}
+          {/* How to Use Tab - Fully Restored & Detailed */}
           {activeTab === 'howto' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8 prose prose-invert max-w-none">
               <h2 className="text-3xl font-bold mb-8 text-white">How to Use FM Value Scout V4</h2>
@@ -523,6 +454,7 @@ export default function FMValueScoutV4Phase4() {
                       <li>• Name, Position, Age, Transfer Value, Wage, League, Minutes</li>
                       <li>• For Strikers: Goals, Assists, Shots, xG</li>
                       <li>• For CDMs / Defenders: Tackles (Tck C), Interceptions (Itc), Key Passes, Pas %</li>
+                      <li>• For Wing-Backs: Tackles, Interceptions, Key Passes, Assists</li>
                     </ul>
                   </div>
                 </div>
@@ -586,33 +518,31 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
-          {/* Squad Builder Tab - Improved */}
+          {/* Squad Builder Tab */}
           {activeTab === 'squad' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-semibold flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
-                <select 
-                  value={currentFormation} 
-                  onChange={(e) => setCurrentFormation(e.target.value)}
-                  className="bg-zinc-800 border border-violet-900/50 rounded-2xl px-4 py-2 text-sm"
-                >
-                  {formations.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
                 <button onClick={() => setSquad([])} className="text-red-400 flex items-center gap-2 text-sm">
                   <Trash2 className="w-4 h-4" /> Clear Squad
                 </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Formation Pitch */}
                 <div className="lg:col-span-2">
                   <div 
                     className="bg-emerald-950 border-2 border-emerald-700 rounded-3xl p-8 min-h-[420px] relative"
-                    onDrop={handleDropOnSquad}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const playerId = parseInt(e.dataTransfer.getData('playerId'));
+                      const player = shortlist.find(p => p.id === playerId);
+                      if (player && !squad.find(p => p.id === player.id)) {
+                        setSquad([...squad, player]);
+                      }
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                   >
                     <div className="grid grid-cols-5 gap-4 h-full">
-                      {/* Simplified formation slots - you can expand this further if needed */}
                       {Array.from({ length: 11 }).map((_, i) => (
                         <div key={i} className="bg-zinc-900/70 border border-emerald-600 rounded-2xl flex items-center justify-center text-xs text-emerald-300 font-medium">
                           Slot {i+1}
@@ -623,42 +553,47 @@ export default function FMValueScoutV4Phase4() {
                   </div>
                 </div>
 
-                {/* Squad Stats */}
                 <div>
                   <div className="bg-zinc-800 rounded-3xl p-6 sticky top-8">
                     <h3 className="font-semibold mb-6">Squad Stats</h3>
                     <div className="space-y-6 text-sm">
                       <div className="flex justify-between">
                         <span className="text-zinc-400">Average Score</span>
-                        <span className="font-mono text-emerald-400 text-xl">{squadStats.avgScore}</span>
+                        <span className="font-mono text-emerald-400 text-xl">
+                          {(squad.reduce((sum, p) => sum + p.valueScore, 0) / (squad.length || 1)).toFixed(1)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-zinc-400">Total Wage</span>
-                        <span className="font-mono">£{squadStats.totalWage}k p/w</span>
+                        <span className="font-mono">£{squad.reduce((sum, p) => {
+                          const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
+                          return sum + wageNum;
+                        }, 0)}k p/w</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-zinc-400">Average Age</span>
-                        <span className="font-mono">{squadStats.avgAge}</span>
+                        <span className="font-mono">{(squad.reduce((sum, p) => sum + p.age, 0) / (squad.length || 1)).toFixed(1)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-zinc-400">Hidden Gems</span>
-                        <span className="font-mono text-amber-400">{squadStats.gems} 💎</span>
+                        <span className="font-mono text-amber-400">{squad.filter(p => p.badge.type === 'gem').length} 💎</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Shortlist players ready for drag */}
               <div className="mt-8">
-                <h4 className="text-sm text-zinc-400 mb-3">Your Shortlist (drag to formation)</h4>
+                <h4 className="text-sm text-zinc-400 mb-3">Your Shortlist (drag to squad)</h4>
                 <div className="flex flex-wrap gap-3">
                   {shortlist.map((player) => (
                     <div 
                       key={player.id} 
                       draggable 
-                      onDragStart={(e) => handleDragStart(e, player)}
-                      className="bg-zinc-800 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-grab text-sm"
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerId', player.id.toString());
+                      }}
+                      className="bg-zinc-800 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-grab text-sm hover:bg-zinc-700"
                     >
                       <span>{player.name}</span>
                       <span className="font-mono text-emerald-400">{player.valueScore}</span>
@@ -675,7 +610,7 @@ export default function FMValueScoutV4Phase4() {
               <h2 className="text-2xl font-semibold mb-6">Player Comparison</h2>
               {selectedForComparison.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {selectedForComparison.map((p, i) => (
+                  {selectedForComparison.map((p: Player, i: number) => (
                     <div key={i} className="bg-zinc-800 rounded-3xl p-6">
                       <div className="font-semibold">{p.name}</div>
                       <div className="text-emerald-400 text-4xl font-bold my-4">{p.valueScore}</div>

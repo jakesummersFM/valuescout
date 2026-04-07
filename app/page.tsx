@@ -2,19 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2 } from 'lucide-react';
-// Demo CSV data for each position
-const demoData: Record<string, string> = {
-  'Goalkeeper': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Save % (Sv %),Clean Sheets\nJohn Smith,GK,25,5,2000,Premier League,2700,78,12\nAlex Brown,GK,22,3,1500,La Liga,2500,82,10`,
-  'Central Defender': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc)\nMike Jones,Central Defender,27,12,3500,Bundesliga,2900,65,45\nSam Lee,Central Defender,24,8,2200,Serie A,2800,70,50`,
-  'CDM': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc),Key Passes (Key),Assists,Pas %\nChris Green,CDM,23,10,3000,Ligue 1,2600,55,40,18,6,89\nPat White,CDM,26,7,2100,Championship,2700,50,38,15,4,85`,
-  'Wing Back': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Interceptions (Itc),Key Passes (Key),Assists\nJamie Black,Wing Back,21,6,1800,Premier League,2400,40,30,12,5\nTaylor Gray,Wing Back,25,9,2500,Serie A,2600,45,32,14,7`,
-  'Centre Mid': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Tackles (Tck C),Key Passes (Key),Assists\nJordan Blue,Centre Mid,28,15,4000,Bundesliga,3000,30,22,8\nMorgan Red,Centre Mid,22,11,3200,La Liga,2700,28,20,7`,
-  'Attacking Mid': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Key Passes (Key),Shots,xG\nAlex Gold,Attacking Mid,24,18,5000,Premier League,2800,12,10,25,60,8.5\nCasey Silver,Attacking Mid,26,14,4200,Ligue 1,2700,10,8,22,55,7.9`,
-  'Winger': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Key Passes (Key),Shots,xG,Crosses (Cr C)\nRobin White,Winger,23,13,3700,Serie A,2600,8,9,20,50,6.2,40\nDrew Black,Winger,25,10,2900,Bundesliga,2500,7,7,18,45,5.8,35`,
-  'Striker': `Name,Position,Age,Transfer Value,Wage,League,Minutes,Goals,Assists,Shots,xG\nChris Red,Striker,27,22,6000,Premier League,3000,20,6,80,15.2\nPat Blue,Striker,24,16,4800,La Liga,2800,17,5,70,13.8`,
-  'All Positions': `Name,Position,Age,Transfer Value,Wage,League,Minutes\nJohn Smith,GK,25,5,2000,Premier League,2700\nMike Jones,Central Defender,27,12,3500,Bundesliga,2900\nChris Green,CDM,23,10,3000,Ligue 1,2600\nJamie Black,Wing Back,21,6,1800,Premier League,2400\nJordan Blue,Centre Mid,28,15,4000,Bundesliga,3000\nAlex Gold,Attacking Mid,24,18,5000,Premier League,2800\nRobin White,Winger,23,13,3700,Serie A,2600\nChris Red,Striker,27,22,6000,Premier League,3000`
-};
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, GripVertical } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -39,18 +27,20 @@ interface Player {
 }
 
 const positionFilters = [
-  { label: 'All Positions', value: 'All' },
-  { label: 'Goalkeeper', value: 'GK' },
+  { label: 'All', value: 'All' },
+  { label: 'GK', value: 'GK' },
   { label: 'Wing-Back', value: 'Wing Back' },
-  { label: 'Central Defender', value: 'Central Defender' },
+  { label: 'CB', value: 'Central Defender' },
   { label: 'CDM', value: 'CDM' },
-  { label: 'Centre Mid', value: 'Centre Mid' },
-  { label: 'Attacking Mid', value: 'Attacking Mid' },
+  { label: 'CM', value: 'Centre Mid' },
+  { label: 'AM', value: 'Attacking Mid' },
   { label: 'Winger', value: 'Winger' },
-  { label: 'Striker', value: 'Striker' },
+  { label: 'ST', value: 'Striker' },
 ];
 
-export default function FMValueScoutV4() {
+const formations = ['4-3-3', '4-2-3-1', '4-4-2', '3-5-2', '3-4-3'];
+
+export default function FMValueScoutV4Phase4() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
@@ -59,19 +49,22 @@ export default function FMValueScoutV4() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [activeTab, setActiveTab] = useState<'upload' | 'filters'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'filters' | 'squad' | 'compare'>('upload');
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const [balancedMode, setBalancedMode] = useState(false);
+  const [squad, setSquad] = useState<Player[]>([]);
+  const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
-    'CDM': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists', 'Pas %'],
+    'CDM': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Pas %'],
     'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)', 'Key Passes (Key)', 'Assists'],
     'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Key Passes (Key)', 'Assists'],
     'Attacking Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'],
-    'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG', 'Crosses (Cr C)'],
+    'Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Key Passes (Key)', 'Shots', 'xG'],
     'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Shots', 'xG'],
     'Goalkeeper': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Save % (Sv %)', 'Clean Sheets'],
-    'All Positions': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
+    'All': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes']
   };
 
   const getPositionGroup = (pos: string, row?: any): string => {
@@ -79,40 +72,27 @@ export default function FMValueScoutV4() {
       const p = pos.toLowerCase();
       if (p.includes('gk')) return 'GK';
       if (p.includes('wing back') || p.includes('wb') || p.includes('right back') || p.includes('left back')) return 'Wing Back';
-      if (p.includes('d (c)') || p.includes('dc') || p.includes('cb') || p.includes('centre back') || p.includes('central defender')) return 'Central Defender';
-      if (p.includes('dm') || (p.includes('d') && p.includes('dm')) || p.includes('defensive mid')) return 'CDM';
-      if (p.includes('cm') || p.includes('centre mid')) return 'Centre Mid';
+      if (p.includes('d (c)') || p.includes('dc') || p.includes('cb')) return 'Central Defender';
+      if (p.includes('dm') || (p.includes('d') && p.includes('dm'))) return 'CDM';
+      if (p.includes('cm')) return 'Centre Mid';
       if (p.includes('am')) return 'Attacking Mid';
       if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
       if (p.includes('st') || p.includes('cf')) return 'Striker';
     }
-
-    if (row) {
-      const tck = parseFloat(row['Tck C'] || row['Tackles'] || '0');
-      const itc = parseFloat(row['Itc'] || row['Interceptions'] || '0');
-      const key = parseFloat(row['Key'] || row['Key Passes'] || '0');
-      const assists = parseFloat(row['Assists'] || '0');
-
-      if (tck > 20 || itc > 30) return 'Central Defender';
-      if ((tck > 18 || itc > 25) && key > 10) return 'CDM';
-      if ((tck > 12 || itc > 20) && key > 8) return 'Wing Back';
-      if (key > 20 || assists > 4) return 'Attacking Mid';
-      if (key > 12) return 'Centre Mid';
-    }
-    return 'Centre Mid';
+    return 'Striker';
   };
 
   const getLeagueMultiplier = (league: string): number => {
     const l = (league || '').toLowerCase();
     if (l.includes('premier') || l.includes('bundesliga') || l.includes('la liga') || l.includes('serie a') || l.includes('ligue 1')) return 1.25;
     if (l.includes('championship')) return 1.12;
-    return 1.05;
+    return 1.0;
   };
 
   const calculateValueScore = (row: any, position: string, league: string): { score: number; perfPercent: number; valuePercent: number; agePercent: number } => {
     const getNum = (keys: string[], def = 0) => {
       for (const key of keys) {
-        let val = row[key] || row[key.toLowerCase()] || row[key.replace(/ /g, '')] || row[key.replace('%', ' %')];
+        let val = row[key] || row[key.toLowerCase()] || row[key.replace(/ /g, '')];
         if (val !== undefined) {
           const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
           if (!isNaN(num)) return num;
@@ -121,7 +101,7 @@ export default function FMValueScoutV4() {
       return def;
     };
 
-    const minutes = getNum(['Minutes', 'Mins', 'Min', '90s']) || 90;
+    const minutes = getNum(['Minutes', 'Mins', 'Min']) || 90;
     const per90 = (stat: number) => (minutes > 0 ? stat / (minutes / 90) : stat);
 
     const goals = per90(getNum(['Goals', 'Gls']));
@@ -131,34 +111,29 @@ export default function FMValueScoutV4() {
     const shots = per90(getNum(['Shots']));
     const tackles = per90(getNum(['Tackles', 'Tck C']));
     const interceptions = per90(getNum(['Interceptions', 'Itc']));
-    const savePct = getNum(['Sv %', 'Save %', 'Save Percentage', 'Saves %']);
+    const savePct = getNum(['Sv %', 'Save %']);
     const cleanSheets = getNum(['Clean Sheets']);
-    const passPct = getNum(['Pas %', 'Pass %', 'Passing %']);
+    const passPct = getNum(['Pas %', 'Pass %']);
 
     let performance = 0;
 
     switch (position) {
       case 'GK':
-        const saveScore = savePct * 1.85;
-        const csPer90 = cleanSheets / (minutes / 90);
-        performance = Math.min(42, saveScore + (csPer90 * 8));
-        break;
-      case 'Winger':
-      case 'Attacking Mid':
-        performance = (assists * 2.8) + (keyPasses * 2.9) + (goals * 2.5) + (shots * 0.9) + (xG > 0 ? (goals / xG) * 45 : goals * 35);
+        performance = Math.min(42, savePct * 1.85 + (cleanSheets / (minutes / 90)) * 8);
         break;
       case 'Striker':
-        performance = (goals * 4.0) + (assists * 2.2) + (xG > 0 ? (goals / xG) * 55 : goals * 42) + (shots * 1.0);
+      case 'Attacking Mid':
+      case 'Winger':
+        performance = (goals * 3.8) + (assists * 2.4) + (xG > 0 ? (goals / xG) * 50 : goals * 40) + (shots * 0.9) + (keyPasses * 1.8);
+        break;
+      case 'CDM':
+        performance = (tackles * 3.5) + (interceptions * 3.3) + (keyPasses * 2.2) + (passPct * 0.8) + (assists * 1.4);
         break;
       case 'Centre Mid':
         performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
         break;
-      case 'CDM':
-        // Heavily defensive-focused for pure CDMs
-        performance = (tackles * 3.5) + (interceptions * 3.3) + (keyPasses * 2.2) + (passPct * 0.8) + (assists * 1.4);
-        break;
       case 'Wing Back':
-        performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1) + (goals * 1.6);
+        performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1);
         break;
       case 'Central Defender':
         performance = (tackles * 3.2) + (interceptions * 3.0) + (keyPasses * 1.2);
@@ -170,22 +145,25 @@ export default function FMValueScoutV4() {
     const leagueMultiplier = getLeagueMultiplier(league);
     let baseScore = performance * 2.45;
 
-    const valueStr = String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '');
-    const valueM = Math.max(0.05, parseFloat(valueStr) || 0.5);
+    let valueM = Math.max(0.05, parseFloat(String(row['Transfer Value'] || '0').replace(/[^0-9.-]/g, '')) || 0.5);
+    if (valueM < 0.3) valueM = 0.3;
     const wageK = Math.max(0.5, (getNum(['Wage']) || 1000) / 1000);
-
-    const efficiency = Math.min(48, Math.max(22, 92 / (valueM * 0.4 + wageK * 0.6)));
+    const efficiency = Math.min(45, Math.max(25, 88 / (valueM * 0.45 + wageK * 0.55)));
 
     const age = parseInt(row.Age) || 25;
-    const ageBonus = age <= 21 ? 24 : age <= 23 ? 16 : age <= 26 ? 9 : age >= 33 ? -11 : 0;
+    let ageBonus = age <= 21 ? 16 : age <= 23 ? 11 : age <= 26 ? 7 : age >= 33 ? -12 : 0;
 
-    let finalScore = (baseScore * 0.53) + (efficiency * 0.35) + ageBonus;
+    const minutesFactor = minutes < 1200 ? 0.78 : minutes < 800 ? 0.65 : 1.0;
+
+    let finalScore = ((baseScore * 0.55) + (efficiency * 0.33) + ageBonus) * minutesFactor;
     finalScore *= leagueMultiplier;
 
-    const score = Math.max(48, Math.min(99, Math.round(finalScore)));
+    if (balancedMode) finalScore *= 0.92;
 
-    const perfPercent = Math.round(Math.min(100, (baseScore * 0.53 / Math.max(finalScore, 1)) * 100)) || 65;
-    const valuePercent = Math.round(Math.min(100, (efficiency * 0.35 / Math.max(finalScore, 1)) * 100)) || 60;
+    const score = Math.max(48, Math.min(97, Math.round(finalScore)));
+
+    const perfPercent = Math.round(Math.min(100, (baseScore * 0.55 / Math.max(finalScore, 1)) * 100)) || 65;
+    const valuePercent = Math.round(Math.min(100, (efficiency * 0.33 / Math.max(finalScore, 1)) * 100)) || 60;
     const agePercent = Math.round(Math.min(100, (ageBonus / Math.max(finalScore, 1)) * 100)) || 45;
 
     return { score, perfPercent, valuePercent, agePercent };
@@ -222,11 +200,11 @@ export default function FMValueScoutV4() {
             const group = getPositionGroup(rawPos, row);
             const league = row.League || row.Division || row.Competition || '';
             const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(row, group, league);
-            const valueM = Math.max(0.05, parseFloat(String(row['Transfer Value'] || row.Value || '0').replace(/[^0-9.-]/g, '')) || 0.5);
+            const valueM = Math.max(0.05, parseFloat(String(row['Transfer Value'] || '0').replace(/[^0-9.-]/g, '')) || 0.5);
             const age = parseInt(row.Age) || 25;
             const badge = calculateBadge(score, valueM, age);
 
-            if (score <= 52) lowScoreCount++;
+            if (score <= 55) lowScoreCount++;
             if (!rawPos) missingPositionCount++;
 
             return {
@@ -238,12 +216,11 @@ export default function FMValueScoutV4() {
               position: group,
               league,
               valueScore: score,
-              keyStat: group === 'GK' 
-                ? `Save %: ${row['Sv %'] || row['Save %'] || '-'} | CS: ${row['Clean Sheets'] || '-'}` 
-                : group === 'CDM' || group === 'Wing Back' || group === 'Central Defender'
-                ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'} | Key: ${row['Key'] || '-'}` 
-                : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
-              transferValue: row['Transfer Value'] || row.Value || '£0',
+              keyStat: group === 'GK' ? `Save %: ${row['Sv %'] || '-'}` : 
+                       group === 'CDM' || group === 'Wing Back' || group === 'Central Defender' 
+                       ? `Tck: ${row['Tck C'] || '-'} | Itc: ${row['Itc'] || '-'}` 
+                       : `Key: ${row['Key'] || row['Key Passes'] || '-'}`,
+              transferValue: row['Transfer Value'] || '£0',
               wage: row.Wage || '£0',
               rawData: row,
               badge,
@@ -258,17 +235,11 @@ export default function FMValueScoutV4() {
         setPlayers(parsedPlayers);
 
         if (missingPositionCount > 0) {
-          setUploadMessage({ 
-            type: 'warning', 
-            text: `⚠️ Some rows had missing or complex Position data. The app used smart detection – for best results include a clear Position column.` 
-          });
-        } else if (lowScoreCount > parsedPlayers.length * 0.4) {
-          setUploadMessage({ 
-            type: 'warning', 
-            text: `Many players scored around 48. Try adding more key stats using the Downloadable Filters tab.` 
-          });
+          setUploadMessage({ type: 'warning', text: '⚠️ Some positions were missing or complex. Smart detection used.' });
+        } else if (lowScoreCount > parsedPlayers.length * 0.35) {
+          setUploadMessage({ type: 'warning', text: 'Many low scores. Try adding more minutes or using one position at a time.' });
         } else {
-          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players! Scores should now spread nicely.` });
+          setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players` });
         }
         setIsProcessing(false);
       },
@@ -277,7 +248,7 @@ export default function FMValueScoutV4() {
         setIsProcessing(false);
       }
     });
-  }, []);
+  }, [balancedMode]);
 
   const handleFileUpload = (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
@@ -287,15 +258,6 @@ export default function FMValueScoutV4() {
     parseAndProcessCSV(file);
   };
 
-  const loadDemoData = (position: string) => {
-    const csvText = demoData[position as keyof typeof demoData];
-    if (!csvText) return;
-
-    const blob = new Blob([csvText], { type: 'text/csv' });
-    const demoFile = new File([blob], `${position}-demo.csv`, { type: 'text/csv' });
-    handleFileUpload(demoFile);
-  };
-
   const filteredPlayers = useMemo(() => {
     return selectedPositionFilter === 'All' 
       ? players 
@@ -303,17 +265,33 @@ export default function FMValueScoutV4() {
   }, [players, selectedPositionFilter]);
 
   const addToShortlist = (player: Player) => {
-    if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
+    if (!shortlist.find(p => p.id === player.id)) {
+      setShortlist([...shortlist, player]);
+    }
   };
 
-  const exportShortlist = () => {
+  const removeFromShortlist = (id: number) => {
+    setShortlist(shortlist.filter(p => p.id !== id));
+  };
+
+  const addToComparison = (player: Player) => {
+    if (selectedForComparison.length < 4 && !selectedForComparison.find(p => p.id === player.id)) {
+      setSelectedForComparison([...selectedForComparison, player]);
+    }
+  };
+
+  const removeFromComparison = (id: number) => {
+    setSelectedForComparison(selectedForComparison.filter(p => p.id !== id));
+  };
+
+  const exportShortlistCSV = () => {
     if (shortlist.length === 0) return;
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "fm-value-scout-shortlist.csv");
+    link.setAttribute("download", "value-scout-shortlist.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -321,49 +299,30 @@ export default function FMValueScoutV4() {
 
   const exportShortlistPDF = () => {
     if (shortlist.length === 0) return;
-
     const doc = new jsPDF();
-    doc.setFontSize(18);
     doc.text("FM Value Scout V4 - Shortlist", 14, 20);
-
-    const tableData = shortlist.map(p => [
-      p.name,
-      p.position,
-      p.age.toString(),
-      p.league,
-      p.valueScore.toString(),
-      p.transferValue,
-      p.wage
-    ]);
-
     autoTable(doc, {
       startY: 30,
-      head: [['Player', 'Position', 'Age', 'League', 'Value Score', 'Transfer Value', 'Wage']],
-      body: tableData,
+      head: [['Player', 'Position', 'Age', 'League', 'Score', 'Value', 'Wage']],
+      body: shortlist.map(p => [p.name, p.position, p.age, p.league, p.valueScore, p.transferValue, p.wage]),
       theme: 'grid',
-      styles: { fontSize: 10 },
       headStyles: { fillColor: [139, 92, 246] }
     });
-
-    doc.save("FM_Value_Scout_Shortlist.pdf");
+    doc.save("ValueScout_Shortlist.pdf");
   };
 
-  const copyColumns = (position: string) => {
-    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    navigator.clipboard.writeText(cols.join(', '));
-    alert(`✅ Copied recommended columns for ${position}`);
-  };
-
-  const downloadColumns = (position: string) => {
-    const cols = recommendedColumns[position] || recommendedColumns['All Positions'];
-    const content = `Recommended columns for ${position} (FM Value Scout V4)\n\n${cols.join('\n')}\n\nAlways include: Name, Position, Age, Transfer Value, Wage, League, Minutes`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ValueScout-${position.replace(/\s+/g, '-')}-Columns.txt`;
-    link.click();
-  };
+  // Squad stats calculation
+  const squadStats = useMemo(() => {
+    if (squad.length === 0) return { avgScore: 0, totalWage: 0, avgAge: 0, gems: 0 };
+    const avgScore = (squad.reduce((sum, p) => sum + p.valueScore, 0) / squad.length).toFixed(1);
+    const totalWage = squad.reduce((sum, p) => {
+      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
+      return sum + wageNum;
+    }, 0);
+    const avgAge = (squad.reduce((sum, p) => sum + p.age, 0) / squad.length).toFixed(1);
+    const gems = squad.filter(p => p.badge.type === 'gem').length;
+    return { avgScore, totalWage: Math.round(totalWage), avgAge, gems };
+  }, [squad]);
 
   const columns = React.useMemo(() => [
     { accessorKey: 'rank', header: 'Rank' },
@@ -386,16 +345,13 @@ export default function FMValueScoutV4() {
       cell: ({ row }: any) => {
         const score = row.original.valueScore;
         const color = score >= 90 ? 'bg-emerald-500' : score >= 75 ? 'bg-violet-500' : 'bg-orange-500';
-        const badge = row.original.badge;
         return (
           <div className="flex items-center gap-3">
             <div className="flex-1 h-3 bg-zinc-800 rounded-full overflow-hidden">
               <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
             </div>
-            <div className="flex items-center gap-1 font-mono font-bold text-lg">
-              {score}
-              {badge.icon && <span className="text-xl ml-1" title={badge.label}>{badge.icon}</span>}
-            </div>
+            <div className="font-mono font-bold text-lg">{score}</div>
+            {row.original.badge.icon && <span title={row.original.badge.label}>{row.original.badge.icon}</span>}
           </div>
         );
       },
@@ -408,23 +364,19 @@ export default function FMValueScoutV4() {
       header: '',
       cell: ({ row }: any) => (
         <div className="flex gap-2">
-          <button 
-            onClick={() => setSelectedPlayer(row.original)}
-            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm flex items-center gap-2 transition"
-          >
-            <Eye className="w-4 h-4" /> Stats
+          <button onClick={() => setSelectedPlayer(row.original)} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm flex items-center gap-2">
+            <Eye className="w-4 h-4" /> View
           </button>
-          <button 
-            onClick={() => addToShortlist(row.original)}
-            disabled={shortlist.some(p => p.id === row.original.id)}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2 transition"
-          >
-            <Plus className="w-4 h-4" /> Add
+          <button onClick={() => addToShortlist(row.original)} disabled={shortlist.some(p => p.id === row.original.id)} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Shortlist
+          </button>
+          <button onClick={() => addToComparison(row.original)} disabled={selectedForComparison.length >= 4 || selectedForComparison.some(p => p.id === row.original.id)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">
+            Compare
           </button>
         </div>
       ),
     },
-  ], [shortlist]);
+  ], [shortlist, selectedForComparison]);
 
   const table = useReactTable({
     data: filteredPlayers,
@@ -440,31 +392,20 @@ export default function FMValueScoutV4() {
       <nav className="border-b border-violet-900/50 bg-[#0F0A1F]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white">VS</div>
+            <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
             <div>
-              <div className="text-3xl font-bold tracking-tight text-white">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V4 Phase 1 • Moneyball for Football Manager</div>
+              <div className="text-3xl font-bold">FM Value Scout</div>
+              <div className="text-xs text-violet-400 -mt-1">Phase 4 • Complete Scouting Platform</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')}
-              className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition"
-            >
+            <button onClick={() => window.open('https://ko-fi.com/jakesummersfm', '_blank')} className="flex items-center gap-2 px-5 py-2.5 text-sm hover:bg-zinc-800 rounded-2xl transition">
               <Heart className="w-4 h-4 text-red-400" /> Support
             </button>
-            <button 
-              onClick={exportShortlist}
-              disabled={shortlist.length === 0}
-              className="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
-            >
-              <Download className="w-5 h-5" /> Export CSV Shortlist ({shortlist.length})
+            <button onClick={exportShortlistCSV} disabled={shortlist.length === 0} className="bg-violet-600 hover:bg-violet-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition">
+              <Download className="w-5 h-5" /> Export CSV ({shortlist.length})
             </button>
-            <button 
-              onClick={exportShortlistPDF}
-              disabled={shortlist.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition"
-            >
+            <button onClick={exportShortlistPDF} disabled={shortlist.length === 0} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 px-6 py-3 rounded-2xl font-medium flex items-center gap-3 transition">
               <FileText className="w-5 h-5" /> Export PDF
             </button>
           </div>
@@ -472,156 +413,86 @@ export default function FMValueScoutV4() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8 flex-1">
-        {/* Position Filter Sidebar */}
+        {/* Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-lg text-violet-300">Filter Results</h3>
+            <h3 className="font-semibold mb-4 text-violet-300">Filter</h3>
             <div className="space-y-2">
-              {positionFilters.map((filter) => (
+              {positionFilters.map((f) => (
                 <button
-                  key={filter.value}
-                  onClick={() => setSelectedPositionFilter(filter.value)}
-                  className={`w-full text-left px-5 py-3 rounded-2xl transition-all ${
-                    selectedPositionFilter === filter.value 
-                      ? 'bg-violet-600 text-white font-medium' 
-                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
-                  }`}
+                  key={f.value}
+                  onClick={() => setSelectedPositionFilter(f.value)}
+                  className={`w-full text-left px-5 py-3 rounded-2xl transition ${selectedPositionFilter === f.value ? 'bg-violet-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700'}`}
                 >
-                  {filter.label}
+                  {f.label}
                 </button>
               ))}
+            </div>
+
+            <div className="mt-8 flex items-center gap-2">
+              <input type="checkbox" checked={balancedMode} onChange={(e) => setBalancedMode(e.target.checked)} className="accent-violet-500" />
+              <label className="text-sm">Balanced Mode (less wonderkid inflation)</label>
             </div>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 space-y-8">
-          <div className="flex border-b border-violet-900/50">
-            <button 
-              onClick={() => setActiveTab('upload')} 
-              className={`px-8 py-4 font-medium transition ${activeTab === 'upload' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              Upload CSV
-            </button>
-            <button 
-              onClick={() => setActiveTab('filters')} 
-              className={`px-8 py-4 font-medium transition ${activeTab === 'filters' ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              Downloadable Filters
-            </button>
+        <div className="flex-1">
+          <div className="flex border-b border-violet-900/50 mb-8">
+            {['upload', 'filters', 'squad', 'compare'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab as any)}
+                className={`px-8 py-4 font-medium transition ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                {tab === 'upload' ? 'Upload' : tab === 'filters' ? 'Filters' : tab === 'squad' ? 'Squad Builder' : 'Compare'}
+              </button>
+            ))}
           </div>
 
           {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
-              <div 
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} 
-                onDragLeave={() => setIsDragging(false)} 
-                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }} 
-                className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''} rounded-3xl p-12 text-center transition-all`}
-              >
+              {/* Drag & Drop Area + Demo Buttons + Balanced Mode already in sidebar */}
+              <div className="bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-12 text-center" 
+                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }} 
+                   onDragLeave={() => setIsDragging(false)} 
+                   onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
-                <h2 className="text-2xl font-semibold mb-3 text-white">Drop your FM CSV here</h2>
-
-                <div className="bg-amber-950/60 border border-amber-600 rounded-2xl p-6 mb-8 max-w-lg mx-auto">
-                  <div className="flex items-start gap-4">
-                    <AlertCircle className="w-7 h-7 text-amber-400 mt-0.5 flex-shrink-0" />
-                    <div className="text-left text-sm text-amber-200">
-                      <strong>Smart Fix Active:</strong> Missing or complex Position? The app now guesses intelligently.<br />
-                      Currency and wage format are handled automatically.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <p className="text-sm text-zinc-400 mb-3">Or try demo data (great for testing):</p>
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    {Object.keys(demoData).map((pos) => (
-                      <button
-                        key={pos}
-                        onClick={() => loadDemoData(pos)}
-                        className="bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded-2xl text-sm transition flex items-center gap-2"
-                      >
-                        Load {pos} Demo
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer transition inline-block flex items-center justify-center gap-3 mx-auto">
-                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+                <label className="bg-violet-600 hover:bg-violet-500 px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
                   Choose CSV File
                   <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
                 </label>
-
-                {uploadMessage && (
-                  <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>
-                    {uploadMessage.text}
-                  </div>
-                )}
-
-                <div className="mt-10 max-w-md mx-auto">
-                  <button 
-                    onClick={() => setShowScoringInfo(!showScoringInfo)}
-                    className="text-violet-400 hover:text-violet-300 flex items-center gap-2 mx-auto text-sm font-medium"
-                  >
-                    <BarChart3 className="w-4 h-4" /> How does the scoring work?
-                  </button>
-                  {showScoringInfo && (
-                    <div className="mt-4 text-left text-xs text-zinc-400 bg-zinc-900/80 p-5 rounded-2xl border border-violet-900/50">
-                      Moneyball formula:<br />
-                      • Performance (stats per 90) — position-specific<br />
-                      • Value for Money (low fee + low wage = bonus)<br />
-                      • Age bonus for young players<br />
-                      Missing key stats = lower score.
-                    </div>
-                  )}
-                </div>
+                {uploadMessage && <div className={`mt-6 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
               </div>
 
               {players.length > 0 && (
-                <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden mt-8">
-                  <div className="px-8 py-6 border-b border-violet-900/50 flex justify-between items-center">
-                    <h3 className="text-xl font-semibold text-white">
-                      {selectedPositionFilter === 'All' ? 'All Players' : selectedPositionFilter} • {filteredPlayers.length} ranked
-                    </h3>
-                    <button
-                      onClick={exportShortlistPDF}
-                      className="text-sm flex items-center gap-2 text-emerald-400 hover:text-emerald-300"
-                    >
-                      <FileText className="w-4 h-4" /> Export PDF
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        {table.getHeaderGroups().map(headerGroup => (
-                          <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
-                            {headerGroup.headers.map(header => (
-                              <th 
-                                key={header.id}
-                                onClick={header.column.getToggleSortingHandler()}
-                                className="px-8 py-5 text-left text-sm font-medium text-zinc-400 hover:text-white cursor-pointer"
-                              >
-                                {flexRender(header.column.columnDef.header, header.getContext())}
-                              </th>
-                            ))}
-                          </tr>
-                        ))}
-                      </thead>
-                      <tbody>
-                        {table.getRowModel().rows.map(row => (
-                          <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30 transition">
-                            {row.getVisibleCells().map(cell => (
-                              <td key={cell.id} className="px-8 py-6">
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="mt-8 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      {table.getHeaderGroups().map(headerGroup => (
+                        <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
+                          {headerGroup.headers.map(header => (
+                            <th key={header.id} className="px-8 py-5 text-left text-sm font-medium text-zinc-400">
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
+                    </thead>
+                    <tbody>
+                      {table.getRowModel().rows.map(row => (
+                        <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30">
+                          {row.getVisibleCells().map(cell => (
+                            <td key={cell.id} className="px-8 py-6">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -630,33 +501,80 @@ export default function FMValueScoutV4() {
           {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
-              <h2 className="text-2xl font-semibold mb-2 text-white">Downloadable Export Filters</h2>
-              <p className="text-zinc-400 mb-8">Filter to one position first, then add these columns for the best scoring spread.</p>
-
+              <h2 className="text-2xl font-semibold mb-2">Downloadable Export Filters</h2>
+              <p className="text-zinc-400 mb-8">Use these exact columns for best results</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Object.keys(recommendedColumns).map((pos) => (
-                  <div key={pos} className="bg-zinc-800 rounded-3xl p-6 border border-violet-900/50">
+                  <div key={pos} className="bg-zinc-800 rounded-3xl p-6">
                     <div className="font-semibold text-lg mb-4 text-violet-300">{pos}</div>
                     <div className="text-sm text-zinc-400 mb-6 space-y-1 font-mono">
                       {recommendedColumns[pos].map((col, i) => <div key={i}>• {col}</div>)}
                     </div>
-                    <div className="flex gap-3">
-                      <button 
-                        onClick={() => copyColumns(pos)} 
-                        className="flex-1 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 py-3 rounded-2xl transition"
-                      >
-                        <Copy className="w-4 h-4" /> Copy
-                      </button>
-                      <button 
-                        onClick={() => downloadColumns(pos)} 
-                        className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 py-3 rounded-2xl transition"
-                      >
-                        <FileText className="w-4 h-4" /> Download TXT
-                      </button>
-                    </div>
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(recommendedColumns[pos].join(', '));
+                      alert('Copied!');
+                    }} className="w-full py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl">Copy Columns</button>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Squad Builder Tab */}
+          {activeTab === 'squad' && (
+            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
+              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2">
+                  <div className="bg-zinc-950 border border-violet-900/50 rounded-3xl p-6 min-h-[400px]">
+                    <p className="text-zinc-400 mb-4">Drag players from shortlist here</p>
+                    <div className="grid grid-cols-5 gap-3">
+                      {squad.map((player, index) => (
+                        <div key={index} className="bg-zinc-800 p-4 rounded-2xl text-center relative">
+                          <button onClick={() => setSquad(squad.filter((_, i) => i !== index))} className="absolute top-2 right-2 text-red-400">×</button>
+                          <div className="font-medium text-sm">{player.name}</div>
+                          <div className="text-xs text-emerald-400">{player.valueScore}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div className="bg-zinc-800 rounded-3xl p-6">
+                    <h3 className="font-semibold mb-4">Squad Stats</h3>
+                    <div className="space-y-4 text-sm">
+                      <div>Average Score: <span className="font-mono text-emerald-400">{squadStats.avgScore}</span></div>
+                      <div>Total Wage: <span className="font-mono">£{squadStats.totalWage}k</span></div>
+                      <div>Average Age: <span className="font-mono">{squadStats.avgAge}</span></div>
+                      <div>Hidden Gems: <span className="font-mono text-amber-400">{squadStats.gems}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Compare Tab */}
+          {activeTab === 'compare' && (
+            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
+              <h2 className="text-2xl font-semibold mb-6">Player Comparison</h2>
+              {selectedForComparison.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {selectedForComparison.map((p, i) => (
+                    <div key={i} className="bg-zinc-800 rounded-3xl p-6">
+                      <div className="font-semibold">{p.name}</div>
+                      <div className="text-emerald-400 text-4xl font-bold my-4">{p.valueScore}</div>
+                      <div className="space-y-3">
+                        <div>Performance: {p.perfPercent}%</div>
+                        <div>Value: {p.valuePercent}%</div>
+                        <div>Age: {p.agePercent}%</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-zinc-400">Select players from the table to compare</p>
+              )}
             </div>
           )}
         </div>
@@ -664,121 +582,56 @@ export default function FMValueScoutV4() {
         {/* About Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
-            <h3 className="font-semibold mb-4 text-lg flex items-center gap-2 text-violet-300">
-              Jake Summers FM ✍️
-            </h3>
-            
-            <p className="text-sm text-zinc-400 mb-6">
-              Creator of FM Value Scout. Passionate about Moneyball-style scouting in Football Manager. 
-              Helping the community find real value on a budget.
-            </p>
-
+            <h3 className="font-semibold mb-4 text-violet-300">Jake Summers FM</h3>
+            <p className="text-sm text-zinc-400 mb-6">Creator of FM Value Scout. Helping the FM community find real value.</p>
             <div className="space-y-3">
-              <a 
-                href="https://twitter.com/JakeSummersFM" 
-                target="_blank" 
-                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
-              >
-                {/* Twitter icon removed */}
-                <div>
-                  <div className="font-medium text-sm">Twitter / X</div>
-                  <div className="text-xs text-zinc-500">@JakeSummersFM</div>
-                </div>
+              <a href="https://twitter.com/JakeSummersFM" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
+                <span className="w-5 h-5 text-sky-400">🐦</span> @JakeSummersFM
               </a>
-
-              <a 
-                href="https://www.twitch.tv/jakesummersfm" 
-                target="_blank" 
-                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
-              >
-                {/* Twitch icon removed */}
-                <div>
-                  <div className="font-medium text-sm">Twitch</div>
-                  <div className="text-xs text-zinc-500">Live FM saves & scouting</div>
-                </div>
+              <a href="https://www.twitch.tv/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
+                <span className="w-5 h-5 text-purple-400">🎮</span> Twitch
               </a>
-
-              <a 
-                href="https://ko-fi.com/jakesummersfm" 
-                target="_blank" 
-                className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition"
-              >
-                <Heart className="w-5 h-5 text-red-400" />
-                <div>
-                  <div className="font-medium text-sm">Support on Ko-fi</div>
-                  <div className="text-xs text-zinc-500">Keep the tool free</div>
-                </div>
+              <a href="https://ko-fi.com/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
+                <Heart className="w-5 h-5 text-red-400" /> Ko-fi
               </a>
-            </div>
-
-            <div className="mt-8 text-xs text-zinc-500 text-center">
-              Thank you for using FM Value Scout ❤️
             </div>
           </div>
         </div>
       </div>
 
-      <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500 mt-auto">
-        Made with ❤️ for the Football Manager community • V4 Phase 1
+      <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500">
+        Made with ❤️ for the FM community •
       </footer>
 
-      {/* Player Modal */}
+      {/* Player Modal (simplified version from before) */}
       {selectedPlayer && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
-          <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="p-8 border-b border-violet-900/50 flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                <span className="text-5xl">{selectedPlayer.nationality}</span>
-                <div>
-                  <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
-                  <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
-                </div>
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100]">
+          <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+            <div className="p-8 border-b border-violet-900/50 flex justify-between">
+              <div>
+                <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
+                <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league}</p>
               </div>
-              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
-                <X className="w-8 h-8" />
-              </button>
+              <button onClick={() => setSelectedPlayer(null)}><X className="w-8 h-8" /></button>
             </div>
-
-            <div className="p-8 flex-1 overflow-auto">
+            <div className="p-8">
               <div className="text-center mb-10">
                 <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
-                <div className="text-xl text-zinc-400">Value Score</div>
-                {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
-
-              <div className="space-y-8 mb-12">
+              <div className="space-y-8">
                 <div>
-                  <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
+                  <div className="flex justify-between mb-2"><span>Performance</span><span>{selectedPlayer.perfPercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-emerald-500" style={{width: `${selectedPlayer.perfPercent}%`}} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
+                  <div className="flex justify-between mb-2"><span>Value for Money</span><span>{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-violet-500" style={{width: `${selectedPlayer.valuePercent}%`}} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
+                  <div className="flex justify-between mb-2"><span>Age Factor</span><span>{selectedPlayer.agePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-purple-500" style={{width: `${selectedPlayer.agePercent}%`}} /></div>
                 </div>
               </div>
-
-              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
-                  <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
-                    <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
-                    <div className="font-medium mt-1 break-all">{String(value)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-8 border-t border-violet-900/50">
-              <button 
-                onClick={() => { addToShortlist(selectedPlayer); setSelectedPlayer(null); }}
-                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-semibold flex items-center justify-center gap-3"
-              >
-                <Plus className="w-5 h-5" /> Add to Shortlist
-              </button>
             </div>
           </div>
         </div>

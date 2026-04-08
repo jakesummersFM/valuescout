@@ -432,11 +432,10 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
-          {/* How to Use Tab - Fully Restored */}
+          {/* How to Use Tab */}
           {activeTab === 'howto' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8 prose prose-invert max-w-none">
               <h2 className="text-3xl font-bold mb-8 text-white">How to Use FM Value Scout V4</h2>
-
               <div className="space-y-12">
                 <div>
                   <h3 className="text-xl font-semibold mb-4">1. Export the Perfect CSV from FM</h3>
@@ -645,7 +644,7 @@ export default function FMValueScoutV4Phase4() {
         Made with ❤️ for the FM community • Phase 4
       </footer>
 
-      {/* Player Modal */}
+      {/* Player Modal - FIXED WITH FULL STATS BARS */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
@@ -661,14 +660,17 @@ export default function FMValueScoutV4Phase4() {
                 <X className="w-8 h-8" />
               </button>
             </div>
+
             <div className="p-8">
               <div className="text-center mb-10">
                 <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
                 <div className="text-xl text-zinc-400">Value Score</div>
+                {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
+
               <div className="space-y-8 mb-12">
                 <div>
-                  <div className="flex justify-between mb-2 text-sm"><span>Performance</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
@@ -679,6 +681,16 @@ export default function FMValueScoutV4Phase4() {
                   <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
                   <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
                 </div>
+              </div>
+
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
+                  <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
+                    <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
+                    <div className="font-medium mt-1 break-all">{String(value)}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

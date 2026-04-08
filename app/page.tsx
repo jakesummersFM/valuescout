@@ -644,7 +644,7 @@ export default function FMValueScoutV4Phase4() {
         Made with ❤️ for the FM community • Phase 4
       </footer>
 
-      {/* Player Modal - FIXED WITH FULL STATS BARS */}
+      {/* Player Modal - FULL STATS BARS RESTORED */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
@@ -668,6 +668,7 @@ export default function FMValueScoutV4Phase4() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
+              {/* STATS BARS - THIS SECTION WAS MISSING BEFORE */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>

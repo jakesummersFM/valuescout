@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, AlertCircle, Loader2, Users, HelpCircle, Trash2 } from 'lucide-react';
+import { Upload, Download, Plus, X, Eye, BarChart3, Heart, Copy, FileText, ExternalLink, AlertCircle, Loader2, Users, HelpCircle, Trash2 } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -39,49 +39,18 @@ const positionFilters = [
 ];
 
 export default function FMValueScoutV4Phase4() {
-
   const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
-  const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
+  const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
   const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'howto' | 'filters' | 'squad' | 'compare'>('upload');
+  const [selectedForComparison, setSelectedForComparison] = useState<Player[]>([]);
   const [balancedMode, setBalancedMode] = useState(false);
   const [squad, setSquad] = useState<Player[]>([]);
-
-  // Memoized filtered players for table
-  const filteredPlayers = useMemo(() => {
-    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
-  }, [players, selectedPositionFilter]);
-
-
-
-
-
-
-  // Table instance for TanStack Table
-  const table = useReactTable({
-    data: filteredPlayers,
-    columns: useMemo(() => [
-      { accessorKey: 'rank', header: 'Rank' },
-      { accessorKey: 'name', header: 'Name' },
-      { accessorKey: 'position', header: 'Position' },
-      { accessorKey: 'age', header: 'Age' },
-      { accessorKey: 'league', header: 'League' },
-      { accessorKey: 'valueScore', header: 'Score' },
-      { accessorKey: 'transferValue', header: 'Value' },
-      { accessorKey: 'wage', header: 'Wage' },
-    ], []),
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    debugTable: false,
-  });
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
@@ -286,6 +255,30 @@ export default function FMValueScoutV4Phase4() {
     parseAndProcessCSV(file);
   };
 
+  const filteredPlayers = useMemo(() => {
+    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
+  }, [players, selectedPositionFilter]);
+
+  const columns = useMemo(() => [
+    { accessorKey: 'rank', header: '#' },
+    { accessorKey: 'name', header: 'Player' },
+    { accessorKey: 'position', header: 'Position' },
+    { accessorKey: 'age', header: 'Age' },
+    { accessorKey: 'league', header: 'League' },
+    { accessorKey: 'valueScore', header: 'Score' },
+    { accessorKey: 'keyStat', header: 'Key Stat' },
+    { accessorKey: 'transferValue', header: 'Value' },
+    { accessorKey: 'wage', header: 'Wage' },
+  ], []);
+
+  const table = useReactTable({
+    data: filteredPlayers,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   const addToShortlist = (player: Player) => {
     if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
@@ -412,9 +405,9 @@ export default function FMValueScoutV4Phase4() {
                 <div className="mt-8 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
                   <table className="w-full">
                     <thead>
-                      {table.getHeaderGroups().map((headerGroup: any) => (
+                      {table.getHeaderGroups().map(headerGroup => (
                         <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
-                          {headerGroup.headers.map((header: any) => (
+                          {headerGroup.headers.map(header => (
                             <th key={header.id} className="px-8 py-5 text-left text-sm font-medium text-zinc-400">
                               {flexRender(header.column.columnDef.header, header.getContext())}
                             </th>
@@ -423,9 +416,9 @@ export default function FMValueScoutV4Phase4() {
                       ))}
                     </thead>
                     <tbody>
-                      {table.getRowModel().rows.map((row: any) => (
+                      {table.getRowModel().rows.map(row => (
                         <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30">
-                          {row.getVisibleCells().map((cell: any) => (
+                          {row.getVisibleCells().map(cell => (
                             <td key={cell.id} className="px-8 py-6">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
@@ -439,7 +432,7 @@ export default function FMValueScoutV4Phase4() {
             </div>
           )}
 
-          {/* How to Use Tab - Fully Restored & Detailed */}
+          {/* How to Use Tab - Fully Restored */}
           {activeTab === 'howto' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8 prose prose-invert max-w-none">
               <h2 className="text-3xl font-bold mb-8 text-white">How to Use FM Value Scout V4</h2>
@@ -454,13 +447,12 @@ export default function FMValueScoutV4Phase4() {
                       <li>• Name, Position, Age, Transfer Value, Wage, League, Minutes</li>
                       <li>• For Strikers: Goals, Assists, Shots, xG</li>
                       <li>• For CDMs / Defenders: Tackles (Tck C), Interceptions (Itc), Key Passes, Pas %</li>
-                      <li>• For Wing-Backs: Tackles, Interceptions, Key Passes, Assists</li>
                     </ul>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-semibold mb-4">2. Upload &amp; Get Results</h3>
+                  <h3 className="text-xl font-semibold mb-4">2. Upload & Get Results</h3>
                   <p className="text-zinc-400">Drag and drop your CSV or click to upload. The app will automatically detect positions and calculate Moneyball-style Value Scores (48–97).</p>
                   <ul className="mt-4 list-disc list-inside text-zinc-400 space-y-2">
                     <li>Use <strong>Balanced Mode</strong> if you see too many 99s on wonderkids.</li>
@@ -610,7 +602,7 @@ export default function FMValueScoutV4Phase4() {
               <h2 className="text-2xl font-semibold mb-6">Player Comparison</h2>
               {selectedForComparison.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {selectedForComparison.map((p: Player, i: number) => (
+                  {selectedForComparison.map((p, i) => (
                     <div key={i} className="bg-zinc-800 rounded-3xl p-6">
                       <div className="font-semibold">{p.name}</div>
                       <div className="text-emerald-400 text-4xl font-bold my-4">{p.valueScore}</div>
@@ -636,10 +628,10 @@ export default function FMValueScoutV4Phase4() {
             <p className="text-sm text-zinc-400 mb-6">Creator of FM Value Scout V4. Helping the community find real value in Football Manager.</p>
             <div className="space-y-3">
               <a href="https://twitter.com/JakeSummersFM" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
-                <span className="w-5 h-5 text-sky-400">🐦</span> @JakeSummersFM
+                <ExternalLink className="w-5 h-5 text-sky-400" /> @JakeSummersFM
               </a>
               <a href="https://www.twitch.tv/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
-                <span className="w-5 h-5 text-purple-400">🎮</span> Twitch
+                <ExternalLink className="w-5 h-5 text-purple-400" /> Twitch
               </a>
               <a href="https://ko-fi.com/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
                 <Heart className="w-5 h-5 text-red-400" /> Ko-fi

@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign, Users, HelpCircle, Trash2, Eye, Plus } from 'lucide-react';
+import { Upload, Download, X, BarChart3, Heart, FileText, Twitch, Twitter, Users, HelpCircle, Trash2, PieChart as PieIcon } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -211,10 +211,7 @@ export default function FMValueScoutV4() {
           .map((p, i) => ({ ...p, rank: i + 1 }));
 
         setPlayers(parsedPlayers);
-        setUploadMessage({ 
-          type: 'success', 
-          text: `✅ Loaded ${parsedPlayers.length} players` 
-        });
+        setUploadMessage({ type: 'success', text: `✅ Loaded ${parsedPlayers.length} players` });
         setIsProcessing(false);
       },
       error: () => {
@@ -233,9 +230,7 @@ export default function FMValueScoutV4() {
   };
 
   const filteredPlayers = useMemo(() => {
-    return selectedPositionFilter === 'All' 
-      ? players 
-      : players.filter(p => p.position === selectedPositionFilter);
+    return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
   }, [players, selectedPositionFilter]);
 
   const table = useReactTable({
@@ -250,9 +245,7 @@ export default function FMValueScoutV4() {
       { 
         accessorKey: 'valueScore', 
         header: 'Value Score',
-        cell: ({ row }) => (
-          <div className="font-mono font-bold text-emerald-400 text-xl">{row.original.valueScore}</div>
-        )
+        cell: ({ row }) => <div className="font-mono font-bold text-emerald-400 text-xl">{row.original.valueScore}</div>
       },
       {
         id: 'actions',
@@ -263,7 +256,7 @@ export default function FMValueScoutV4() {
               onClick={() => setSelectedPlayer(row.original)}
               className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"
             >
-              <Eye className="w-4 h-4" /> View
+              View
             </button>
             <button 
               onClick={() => {
@@ -273,7 +266,7 @@ export default function FMValueScoutV4() {
               }}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-sm flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> Shortlist
+              Shortlist
             </button>
           </div>
         )
@@ -311,9 +304,59 @@ export default function FMValueScoutV4() {
     doc.save("ValueScout_Shortlist.pdf");
   };
 
+  // NEW: Position-specific stats for the pie chart
+  const getKeyStatsForPosition = (player: Player) => {
+    const row = player.rawData;
+    const getNum = (keys: string[]) => {
+      for (const key of keys) {
+        const val = row[key] || row[key.toLowerCase()] || row[key.replace(/ /g, '')];
+        if (val !== undefined) {
+          const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+          if (!isNaN(num)) return num;
+        }
+      }
+      return 0;
+    };
+
+    switch (player.position) {
+      case 'Striker':
+      case 'Attacking Mid':
+      case 'Winger':
+        return [
+          { label: 'xG', value: getNum(['xG']), color: '#10b981' },
+          { label: 'Goals', value: getNum(['Goals', 'Gls']), color: '#eab308' },
+          { label: 'Shots', value: getNum(['Shots']), color: '#f59e0b' },
+          { label: 'Assists', value: getNum(['Assists', 'Ast']), color: '#8b5cf6' },
+          { label: 'Key Passes', value: getNum(['Key', 'Key Passes', 'KP']), color: '#ec4899' },
+        ];
+      case 'GK':
+        return [
+          { label: 'Save %', value: getNum(['Sv %', 'Save %']), color: '#10b981' },
+          { label: 'Clean Sheets', value: getNum(['Clean Sheets']), color: '#eab308' },
+        ];
+      case 'CDM':
+      case 'Centre Mid':
+      case 'Wing Back':
+      case 'Central Defender':
+        return [
+          { label: 'Tackles', value: getNum(['Tck C', 'Tackles']), color: '#10b981' },
+          { label: 'Interceptions', value: getNum(['Itc', 'Interceptions']), color: '#10b981' },
+          { label: 'Key Passes', value: getNum(['Key', 'Key Passes', 'KP']), color: '#eab308' },
+          { label: 'Pass %', value: getNum(['Pas %', 'Pass %']), color: '#8b5cf6' },
+          { label: 'Assists', value: getNum(['Assists', 'Ast']), color: '#ec4899' },
+        ];
+      default:
+        return [
+          { label: 'Goals', value: getNum(['Goals']), color: '#10b981' },
+          { label: 'Assists', value: getNum(['Assists']), color: '#eab308' },
+          { label: 'Key Passes', value: getNum(['Key', 'Key Passes']), color: '#8b5cf6' },
+        ];
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0F0A1F] text-zinc-100">
-      {/* Nav */}
+      {/* Navigation */}
       <nav className="border-b border-violet-900/50 bg-[#0F0A1F]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -338,7 +381,7 @@ export default function FMValueScoutV4() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex gap-8">
-        {/* Sidebar Filters */}
+        {/* Sidebar */}
         <div className="w-64 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
             <h3 className="font-semibold mb-4 text-violet-300">Position Filter</h3>
@@ -353,20 +396,14 @@ export default function FMValueScoutV4() {
                 </button>
               ))}
             </div>
-
             <div className="mt-8 flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                checked={balancedMode} 
-                onChange={(e) => setBalancedMode(e.target.checked)} 
-                className="accent-violet-500" 
-              />
+              <input type="checkbox" checked={balancedMode} onChange={(e) => setBalancedMode(e.target.checked)} className="accent-violet-500" />
               <label className="text-sm">Balanced Mode</label>
             </div>
           </div>
         </div>
 
-        {/* Main Area */}
+        {/* Main Content */}
         <div className="flex-1">
           {/* Tabs */}
           <div className="flex border-b border-violet-900/50 mb-8">
@@ -400,11 +437,7 @@ export default function FMValueScoutV4() {
                   Choose CSV File
                   <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
                 </label>
-                {uploadMessage && (
-                  <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>
-                    {uploadMessage.text}
-                  </div>
-                )}
+                {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
               </div>
 
               {players.length > 0 && (
@@ -445,24 +478,11 @@ export default function FMValueScoutV4() {
               <div className="space-y-10 text-zinc-300">
                 <div>
                   <h3 className="text-xl font-semibold mb-3">1. Export the right CSV from FM</h3>
-                  <p>Export <strong>one position at a time</strong>. Include these columns for best results (use the Export Filters tab to copy them).</p>
+                  <p>Export <strong>one position at a time</strong>. Use the Export Filters tab to copy the recommended columns.</p>
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold mb-3">2. Upload & View Results</h3>
-                  <p>Drag and drop your CSV. The app will calculate Value Scores (48–97) using stats, wage, age and transfer value.</p>
-                  <ul className="list-disc pl-5 mt-3 space-y-1">
-                    <li>Click any player to open the detailed modal with the three breakdown bars</li>
-                    <li>Use Balanced Mode if too many wonderkids score 99</li>
-                    <li>Minimum 1,200 minutes recommended for accurate scoring</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-3">3. New in Phase 4</h3>
-                  <ul className="list-disc pl-5 space-y-1">
-                    <li>Squad Builder – drag players into formation</li>
-                    <li>Player Comparison</li>
-                    <li>Improved player modal with Performance / Value / Age bars</li>
-                  </ul>
+                  <p>Drag and drop your CSV. Click any player to see the breakdown bars and the new position-specific pie chart showing key stats like xG, Tackles, Save %, etc.</p>
                 </div>
               </div>
             </div>
@@ -479,10 +499,7 @@ export default function FMValueScoutV4() {
                     <div className="text-sm font-mono text-zinc-400 mb-6 space-y-1">
                       {cols.map((col, i) => <div key={i}>• {col}</div>)}
                     </div>
-                    <button 
-                      onClick={() => { navigator.clipboard.writeText(cols.join(', ')); alert('Copied!'); }}
-                      className="w-full py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl"
-                    >
+                    <button onClick={() => { navigator.clipboard.writeText(cols.join(', ')); alert('Copied!'); }} className="w-full py-3 bg-violet-600 hover:bg-violet-500 rounded-2xl">
                       Copy Columns
                     </button>
                   </div>
@@ -491,51 +508,22 @@ export default function FMValueScoutV4() {
             </div>
           )}
 
-          {/* Squad Builder Tab */}
-          {activeTab === 'squad' && (
-            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10">
-              <div className="flex justify-between mb-6">
-                <h2 className="text-2xl font-semibold flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
-                <button onClick={() => setSquad([])} className="text-red-400 flex items-center gap-2">
-                  <Trash2 className="w-4 h-4" /> Clear
-                </button>
-              </div>
-              {/* Simple squad area - you can expand later */}
-              <div className="bg-emerald-950 border border-emerald-700 rounded-3xl p-12 min-h-[400px] flex items-center justify-center text-emerald-300">
-                Drag players from your shortlist here (drag & drop coming soon)
-              </div>
-              <div className="mt-8">
-                <h4 className="text-sm text-zinc-400 mb-3">Shortlist (click to add to squad later)</h4>
-                <div className="flex flex-wrap gap-3">
-                  {shortlist.map(p => (
-                    <div key={p.id} className="bg-zinc-800 px-5 py-3 rounded-2xl flex items-center gap-3 text-sm">
-                      {p.name} <span className="font-mono text-emerald-400">({p.valueScore})</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Compare Tab - Placeholder */}
-          {activeTab === 'compare' && (
-            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">
-              Player Comparison coming soon
-            </div>
-          )}
+          {/* Squad & Compare Tabs (placeholder) */}
+          {activeTab === 'squad' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Squad Builder (full drag & drop coming in V5)</div>}
+          {activeTab === 'compare' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Player Comparison (coming in V5)</div>}
         </div>
 
         {/* About Sidebar */}
         <div className="w-80 flex-shrink-0">
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-6 sticky top-24">
             <h3 className="font-semibold mb-4 text-violet-300">Jake Summers FM</h3>
-            <p className="text-sm text-zinc-400 mb-6">Free Moneyball scouting tool for FM26. Find hidden gems and real value.</p>
+            <p className="text-sm text-zinc-400 mb-6">Free Moneyball scouting tool for FM26.</p>
             <div className="space-y-3">
               <a href="https://twitter.com/JakeSummersFM" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
-                <AtSign className="w-5 h-5 text-sky-400" /> @JakeSummersFM
+                <Twitter className="w-5 h-5 text-sky-400" /> @JakeSummersFM
               </a>
               <a href="https://www.twitch.tv/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
-                <Tv className="w-5 h-5 text-purple-400" /> Twitch
+                <Twitch className="w-5 h-5 text-purple-400" /> Twitch
               </a>
               <a href="https://ko-fi.com/jakesummersfm" target="_blank" className="flex items-center gap-3 p-3 bg-zinc-800 hover:bg-zinc-700 rounded-2xl transition">
                 <Heart className="w-5 h-5 text-red-400" /> Support on Ko-fi
@@ -545,7 +533,7 @@ export default function FMValueScoutV4() {
         </div>
       </div>
 
-      {/* Player Modal with Stats Bars */}
+      {/* PLAYER MODAL WITH BOTH BARS + NEW PIE CHART */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
@@ -569,29 +557,78 @@ export default function FMValueScoutV4() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
-              {/* The Three Stats Bars */}
+              {/* Three Colored Bars */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} />
-                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} />
-                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} />
-                  </div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
                 </div>
               </div>
 
-              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Stats</h3>
+              {/* NEW POSITION-SPECIFIC PIE CHART */}
+              <div className="mb-12">
+                <h3 className="font-semibold mb-6 flex items-center gap-2"><PieIcon className="w-5 h-5" /> Key Performance Stats</h3>
+                <div className="flex justify-center mb-8">
+                  <div className="relative w-72 h-72">
+                    <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="#27272a" strokeWidth="16" />
+                      {(() => {
+                        const stats = getKeyStatsForPosition(selectedPlayer);
+                        let offset = 0;
+                        const total = stats.reduce((sum, s) => sum + Math.max(s.value, 0.1), 0) || 1;
+                        return stats.map((stat, i) => {
+                          const percent = Math.round((stat.value / total) * 100);
+                          const result = (
+                            <circle
+                              key={i}
+                              cx="50" cy="50" r="42"
+                              fill="none"
+                              stroke={stat.color}
+                              strokeWidth="16"
+                              strokeDasharray={`${percent} 100`}
+                              strokeDashoffset={`-${offset}`}
+                              strokeLinecap="round"
+                            />
+                          );
+                          offset += percent;
+                          return result;
+                        });
+                      })()}
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center text-center">
+                      <div>
+                        <div className="text-4xl font-bold text-white">{selectedPlayer.perfPercent}</div>
+                        <div className="text-xs text-zinc-400 -mt-1">PERFORMANCE</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pie Legend */}
+                <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  {getKeyStatsForPosition(selectedPlayer).map((stat, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded" style={{ backgroundColor: stat.color }}></div>
+                      <div className="flex-1">{stat.label}</div>
+                      <div className="font-mono text-right">
+                        {stat.value} 
+                        <span className="text-zinc-400"> ({Math.round(stat.value / (getKeyStatsForPosition(selectedPlayer).reduce((a, b) => a + b.value, 0) || 1) * 100)}%)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Raw Stats Grid */}
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
                   <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
@@ -606,7 +643,7 @@ export default function FMValueScoutV4() {
       )}
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500">
-        Made with ❤️ for the FM community • FM Value Scout V4
+        Made with ❤️ for the FM community • FM Value Scout
       </footer>
     </div>
   );

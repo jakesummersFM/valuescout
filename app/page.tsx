@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import { Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign, Users, HelpCircle, Trash2, Copy } from 'lucide-react';
+import { Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign, Users, HelpCircle, Trash2, Copy, Plus } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -38,7 +38,7 @@ const positionFilters = [
   { label: 'ST', value: 'Striker' },
 ];
 
-export default function FMValueScoutV4() {
+export default function FMValueScoutV5() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [shortlist, setShortlist] = useState<Player[]>([]);
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
@@ -51,6 +51,7 @@ export default function FMValueScoutV4() {
   const [balancedMode, setBalancedMode] = useState(false);
   const [squad, setSquad] = useState<Player[]>([]);
   const [copiedName, setCopiedName] = useState<string | null>(null);
+  const [formation, setFormation] = useState('4-3-3');
 
   const recommendedColumns: Record<string, string[]> = {
     'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles (Tck C)', 'Interceptions (Itc)'],
@@ -74,7 +75,7 @@ export default function FMValueScoutV4() {
     if (p.includes('am')) return 'Attacking Mid';
     if (p.includes('winger') || p.includes('rw') || p.includes('lw')) return 'Winger';
     if (p.includes('st') || p.includes('cf')) return 'Striker';
-    return 'Striker';
+    return 'Central Defender';
   };
 
   const getLeagueMultiplier = (league: string): number => {
@@ -111,29 +112,12 @@ export default function FMValueScoutV4() {
     const passPct = getNum(['Pas %', 'Pass %']);
 
     let performance = 0;
-    switch (position) {
-      case 'GK':
-        performance = Math.min(42, savePct * 1.85 + (cleanSheets / (minutes / 90)) * 8);
-        break;
-      case 'Striker':
-      case 'Attacking Mid':
-      case 'Winger':
-        performance = (goals * 3.8) + (assists * 2.4) + (xG > 0 ? (goals / xG) * 50 : goals * 40) + (shots * 0.9) + (keyPasses * 1.8);
-        break;
-      case 'CDM':
-        performance = (tackles * 3.5) + (interceptions * 3.3) + (keyPasses * 2.2) + (passPct * 0.8) + (assists * 1.4);
-        break;
-      case 'Centre Mid':
-        performance = (keyPasses * 2.7) + (assists * 2.2) + (goals * 1.7);
-        break;
-      case 'Wing Back':
-        performance = (tackles * 2.4) + (interceptions * 2.3) + (keyPasses * 2.6) + (assists * 2.1);
-        break;
-      case 'Central Defender':
-        performance = (tackles * 3.2) + (interceptions * 3.0) + (keyPasses * 1.2);
-        break;
-      default:
-        performance = (goals + assists + keyPasses + shots + tackles) * 2.4;
+    if (position === 'GK') {
+      performance = Math.min(42, savePct * 1.85 + (cleanSheets / (minutes / 90)) * 8);
+    } else if (['Central Defender', 'CDM', 'Wing Back'].includes(position)) {
+      performance = (tackles * 4.2) + (interceptions * 4.0) + (keyPasses * 1.5) + (minutes / 100);
+    } else {
+      performance = (goals * 3.8) + (assists * 2.4) + (xG > 0 ? (goals / xG) * 50 : goals * 40) + (shots * 0.9) + (keyPasses * 1.8);
     }
 
     const leagueMultiplier = getLeagueMultiplier(league);
@@ -144,7 +128,7 @@ export default function FMValueScoutV4() {
 
     const age = parseInt(row.Age) || 25;
     let ageBonus = age <= 21 ? 16 : age <= 23 ? 11 : age <= 26 ? 7 : age >= 33 ? -12 : 0;
-    const minutesFactor = minutes < 1200 ? 0.78 : 1.0;
+    const minutesFactor = minutes < 1200 ? 0.78 : minutes < 800 ? 0.65 : 1.0;
 
     let finalScore = ((baseScore * 0.55) + (efficiency * 0.33) + ageBonus) * minutesFactor * leagueMultiplier;
     if (balancedMode) finalScore *= 0.92;
@@ -259,30 +243,13 @@ export default function FMValueScoutV4() {
           const player = row.original;
           return (
             <div className="flex gap-2">
-              <button 
-                onClick={() => setSelectedPlayer(player)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"
-              >
-                View
+              <button onClick={() => setSelectedPlayer(player)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2">View</button>
+              <button onClick={() => copyPlayerName(player.name)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2" title="Copy player name">
+                <Copy className="w-4 h-4" /> {copiedName === player.name ? 'Copied!' : 'Copy'}
               </button>
-              <button 
-                onClick={() => copyPlayerName(player.name)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm flex items-center gap-2"
-                title="Copy player name"
-              >
-                <Copy className="w-4 h-4" />
-                {copiedName === player.name ? 'Copied!' : 'Copy'}
-              </button>
-              <button 
-                onClick={() => {
-                  if (!shortlist.find(p => p.id === player.id)) {
-                    setShortlist([...shortlist, player]);
-                  }
-                }}
-                className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-sm flex items-center gap-2"
-              >
-                + Shortlist
-              </button>
+              <button onClick={() => {
+                if (!shortlist.find(p => p.id === player.id)) setShortlist([...shortlist, player]);
+              }} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-sm flex items-center gap-2">+ Shortlist</button>
             </div>
           );
         }
@@ -296,8 +263,7 @@ export default function FMValueScoutV4() {
 
   const exportShortlistCSV = () => {
     if (shortlist.length === 0) return;
-    const csvContent = "data:text/csv;charset=utf-8," + 
-      shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const csvContent = "data:text/csv;charset=utf-8," + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
     const link = document.createElement("a");
     link.setAttribute("href", encodeURI(csvContent));
     link.setAttribute("download", "value-scout-shortlist.csv");
@@ -309,7 +275,7 @@ export default function FMValueScoutV4() {
   const exportShortlistPDF = () => {
     if (shortlist.length === 0) return;
     const doc = new jsPDF();
-    doc.text("FM Value Scout V4 - Shortlist", 14, 20);
+    doc.text("FM Value Scout V5 - Shortlist", 14, 20);
     autoTable(doc, {
       startY: 30,
       head: [['Player', 'Position', 'Age', 'League', 'Score', 'Value', 'Wage']],
@@ -318,6 +284,54 @@ export default function FMValueScoutV4() {
       headStyles: { fillColor: [139, 92, 246] }
     });
     doc.save("ValueScout_Shortlist.pdf");
+  };
+
+  // Squad drag & drop
+  const handleDragStart = (e: React.DragEvent, player: Player) => {
+    e.dataTransfer.setData('playerId', player.id.toString());
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const playerId = parseInt(e.dataTransfer.getData('playerId'));
+    const player = shortlist.find(p => p.id === playerId);
+    if (player && !squad.find(p => p.id === player.id)) {
+      setSquad([...squad, player]);
+    }
+  };
+
+  const squadStats = useMemo(() => {
+    if (squad.length === 0) return { avgScore: '0.0', totalWage: '0', avgAge: '0.0', gems: 0 };
+    const totalScore = squad.reduce((sum, p) => sum + p.valueScore, 0);
+    const totalWage = squad.reduce((sum, p) => {
+      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
+      return sum + wageNum;
+    }, 0);
+    const totalAge = squad.reduce((sum, p) => sum + p.age, 0);
+    const gems = squad.filter(p => p.badge.type === 'gem').length;
+
+    return {
+      avgScore: (totalScore / squad.length).toFixed(1),
+      totalWage: totalWage.toFixed(0),
+      avgAge: (totalAge / squad.length).toFixed(1),
+      gems
+    };
+  }, [squad]);
+
+  const getStatColor = (key: string, value: any, position: string) => {
+    const num = parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0;
+    if (num === 0) return 'text-red-400';
+
+    if (['Central Defender', 'CDM', 'Wing Back'].includes(position)) {
+      if (key.toLowerCase().includes('tck') || key.toLowerCase().includes('itc') || key.toLowerCase().includes('tackles') || key.toLowerCase().includes('interceptions')) {
+        return num > 40 ? 'text-emerald-400' : num > 20 ? 'text-amber-400' : 'text-red-400';
+      }
+    } else if (['Striker', 'Attacking Mid', 'Winger'].includes(position)) {
+      if (key.toLowerCase().includes('xg') || key.toLowerCase().includes('goals') || key.toLowerCase().includes('shots')) {
+        return num > 0.8 ? 'text-emerald-400' : num > 0.4 ? 'text-amber-400' : 'text-red-400';
+      }
+    }
+    return 'text-zinc-100';
   };
 
   return (
@@ -329,7 +343,7 @@ export default function FMValueScoutV4() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
             <div>
               <div className="text-3xl font-bold">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V4 • Moneyball Scouting</div>
+              <div className="text-xs text-violet-400 -mt-1">V5 • Squad Builder</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -353,11 +367,8 @@ export default function FMValueScoutV4() {
             <h3 className="font-semibold mb-4 text-violet-300">Position Filter</h3>
             <div className="space-y-2">
               {positionFilters.map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => setSelectedPositionFilter(f.value)}
-                  className={`w-full text-left px-5 py-3 rounded-2xl transition ${selectedPositionFilter === f.value ? 'bg-violet-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700'}`}
-                >
+                <button key={f.value} onClick={() => setSelectedPositionFilter(f.value)}
+                  className={`w-full text-left px-5 py-3 rounded-2xl transition ${selectedPositionFilter === f.value ? 'bg-violet-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                   {f.label}
                 </button>
               ))}
@@ -373,11 +384,8 @@ export default function FMValueScoutV4() {
         <div className="flex-1">
           <div className="flex border-b border-violet-900/50 mb-8">
             {['upload', 'howto', 'filters', 'squad', 'compare'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-8 py-4 font-medium transition flex items-center gap-2 ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
-              >
+              <button key={tab} onClick={() => setActiveTab(tab as any)}
+                className={`px-8 py-4 font-medium transition flex items-center gap-2 ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}>
                 {tab === 'upload' && 'Upload CSV'}
                 {tab === 'howto' && <><HelpCircle className="w-4 h-4" /> How to Use</>}
                 {tab === 'filters' && 'Export Filters'}
@@ -390,12 +398,10 @@ export default function FMValueScoutV4() {
           {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
-              <div 
-                className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center transition-all ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''}`}
+              <div className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center transition-all ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}
-              >
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
                 <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
                 <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
                 <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
@@ -436,14 +442,49 @@ export default function FMValueScoutV4() {
             </div>
           )}
 
-          {/* Other tabs (How to Use, Filters, etc.) - keep your existing content if you have it */}
+          {/* Detailed How to Use */}
           {activeTab === 'howto' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 prose prose-invert max-w-none">
-              <h2 className="text-3xl font-bold mb-8">How to Use FM Value Scout V4</h2>
-              <p>Now includes a quick "Copy Name" button in the table so you can copy player names without opening the full modal.</p>
+              <h2 className="text-3xl font-bold mb-8">How to Use FM Value Scout V5</h2>
+              
+              <h3 className="text-xl font-semibold mb-4">1. Export the Perfect CSV from FM</h3>
+              <p>Always export <strong>one position at a time</strong> for the most accurate scores.</p>
+              <div className="bg-zinc-800 rounded-2xl p-6 text-sm my-6">
+                Recommended columns (use the Export Filters tab):
+                <ul className="mt-4 space-y-1 text-emerald-400 font-mono">
+                  <li>• Strikers / Wingers / AM: Goals, Assists, Shots, xG, Key Passes</li>
+                  <li>• CDMs / Defenders: Tackles (Tck C), Interceptions (Itc), Key Passes, Pas %</li>
+                  <li>• GK: Save %, Clean Sheets</li>
+                </ul>
+              </div>
+
+              <h3 className="text-xl font-semibold mb-4">2. Upload & Get Results</h3>
+              <p>Drag and drop your CSV. The app automatically detects position and calculates a Moneyball Value Score using stats, wage, age and transfer value.</p>
+              <ul className="list-disc pl-5 mt-4 space-y-2">
+                <li>Use Balanced Mode if too many wonderkids score 99</li>
+                <li>Minimum 1,200 minutes recommended for reliable scores</li>
+                <li>Click any player to see the three breakdown bars and colored stats grid (green = strong, orange = average, red = weak for that position)</li>
+                <li>Use the Copy Name button to quickly copy player names</li>
+              </ul>
+
+              <h3 className="text-xl font-semibold mb-4">3. Squad Builder (New in V5)</h3>
+              <p>Go to the Squad Builder tab. Drag players from your shortlist onto the pitch. Choose formation and see real-time squad stats (average score, total wage, average age, hidden gems).</p>
+
+              <h3 className="text-xl font-semibold mb-4">4. Best Practices</h3>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>Filter to one position in FM before exporting</li>
+                <li>Check the colored stats grid in the player modal for quick comparison</li>
+                <li>Use the Export Filters tab to get the exact columns FM needs</li>
+              </ul>
+
+              <div className="mt-12 text-center text-sm text-zinc-400">
+                Need more help? Join the Discord or reply on Twitter @JakeSummersFM<br />
+                The tool is 100% free and improves with your feedback ❤️
+              </div>
             </div>
           )}
 
+          {/* Filters Tab */}
           {activeTab === 'filters' && (
             <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10">
               <h2 className="text-2xl font-semibold mb-6">Export Filters (Copy & Paste in FM)</h2>
@@ -463,8 +504,82 @@ export default function FMValueScoutV4() {
             </div>
           )}
 
-          {activeTab === 'squad' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Squad Builder (full version coming in V5)</div>}
-          {activeTab === 'compare' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Player Comparison (coming in V5)</div>}
+          {/* Squad Builder Tab */}
+          {activeTab === 'squad' && (
+            <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold flex items-center gap-3"><Users className="w-6 h-6" /> Squad Builder</h2>
+                <div className="flex items-center gap-4">
+                  <select value={formation} onChange={(e) => setFormation(e.target.value)} className="bg-zinc-800 text-white px-4 py-2 rounded-2xl">
+                    <option value="4-3-3">4-3-3</option>
+                    <option value="4-2-3-1">4-2-3-1</option>
+                    <option value="4-4-2">4-4-2</option>
+                    <option value="3-5-2">3-5-2</option>
+                  </select>
+                  <button onClick={() => setSquad([])} className="text-red-400 flex items-center gap-2 text-sm">
+                    <Trash2 className="w-4 h-4" /> Clear Squad
+                  </button>
+                </div>
+              </div>
+
+              {/* Visual Pitch */}
+              <div 
+                className="bg-emerald-950 border-2 border-emerald-700 rounded-3xl p-12 min-h-[420px] relative grid grid-cols-5 gap-6"
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                {Array.from({ length: 11 }).map((_, i) => (
+                  <div key={i} className="bg-zinc-900/70 border border-emerald-600 rounded-2xl flex items-center justify-center text-xs text-emerald-300 font-medium min-h-[90px]">
+                    Slot {i+1}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8">
+                <h4 className="text-sm text-zinc-400 mb-3">Your Shortlist (drag to squad)</h4>
+                <div className="flex flex-wrap gap-3">
+                  {shortlist.map((player) => (
+                    <div 
+                      key={player.id} 
+                      draggable 
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('playerId', player.id.toString());
+                      }}
+                      className="bg-zinc-800 px-4 py-2 rounded-2xl flex items-center gap-3 cursor-grab text-sm hover:bg-zinc-700"
+                    >
+                      <span>{player.name}</span>
+                      <span className="font-mono text-emerald-400">{player.valueScore}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Squad Stats */}
+              <div className="mt-8 bg-zinc-800 rounded-3xl p-6">
+                <h3 className="font-semibold mb-6">Squad Stats</h3>
+                <div className="grid grid-cols-4 gap-6 text-sm">
+                  <div>
+                    <div className="text-zinc-400">Avg Score</div>
+                    <div className="text-3xl font-mono text-emerald-400">{squadStats.avgScore}</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-400">Total Wage</div>
+                    <div className="text-3xl font-mono">£{squadStats.totalWage}k p/w</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-400">Avg Age</div>
+                    <div className="text-3xl font-mono">{squadStats.avgAge}</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-400">Hidden Gems</div>
+                    <div className="text-3xl font-mono text-amber-400">{squadStats.gems} 💎</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'compare' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Player Comparison (coming soon in future update)</div>}
         </div>
 
         {/* About Sidebar */}
@@ -487,7 +602,7 @@ export default function FMValueScoutV4() {
         </div>
       </div>
 
-      {/* CLEAN PLAYER MODAL - Pie chart removed */}
+      {/* Clean Player Modal */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
@@ -511,7 +626,6 @@ export default function FMValueScoutV4() {
                 {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
               </div>
 
-              {/* Three Colored Bars */}
               <div className="space-y-8 mb-12">
                 <div>
                   <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
@@ -527,13 +641,14 @@ export default function FMValueScoutV4() {
                 </div>
               </div>
 
-              {/* All Exported Stats */}
               <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
                   <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
                     <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
-                    <div className="font-medium mt-1 break-all">{String(value)}</div>
+                    <div className={`font-medium mt-1 break-all ${getStatColor(key, value, selectedPlayer.position)}`}>
+                      {String(value)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -543,7 +658,7 @@ export default function FMValueScoutV4() {
       )}
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500">
-        Made with ❤️ for the FM community • FM Value Scout V4
+        Made with ❤️ for the FM community • FM Value Scout V5
       </footer>
     </div>
   );

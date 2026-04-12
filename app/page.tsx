@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
-import Tesseract from 'tesseract.js'; // Basic client-side OCR
+import Tesseract from 'tesseract.js';
 import { Upload, Download, X, BarChart3, Heart, FileText, Tv, MessageCircle, Users, HelpCircle, Trash2, Copy, Image as ImageIcon } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
@@ -206,68 +206,80 @@ export default function FMValueScoutV5() {
     });
   }, [balancedMode]);
 
-  // NEW: Screenshot Upload with Basic OCR
+  // Improved Screenshot Upload with better OCR handling
   const handleScreenshotUpload = async (files: FileList) => {
     setScreenshotProcessing(true);
-    setUploadMessage({ type: 'warning', text: 'Processing screenshots with OCR... This may take a moment.' });
+    setUploadMessage({ type: 'warning', text: 'Processing screenshots with OCR... This may take 10-30 seconds per image.' });
 
-    const allPlayers: Player[] = [];
+    const allParsedPlayers: Player[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const { data: { text } } = await Tesseract.recognize(file, 'eng');
-      
-      // Very basic parsing - split lines and try to extract key fields
-      const lines = text.split('\n').filter((line: string) => line.trim().length > 5);
-      lines.forEach((line: string, index: number) => {
-        // Rough heuristic parsing - this is basic and will improve in future updates
-        const nameMatch = line.match(/([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)/);
-        const ageMatch = line.match(/\b(\d{1,2})\b/);
-        const posMatch = line.match(/\b(GK|ST|CM|CDM|CB|WB|AM|Winger)\b/i);
+      try {
+        const { data: { text } } = await Tesseract.recognize(file, 'eng', { logger: m => console.log(m) });
 
-        if (nameMatch) {
-          const fakeRow = {
-            Name: nameMatch[0],
-            Age: ageMatch ? ageMatch[1] : '24',
-            Position: posMatch ? posMatch[0] : 'Unknown',
-            'Transfer Value': '£500K',
-            Wage: '£5K p/w',
-            League: 'Unknown League',
-            Minutes: '2000',
-            // Add more fields as needed
-          };
+        // Improved parsing - split into lines and try to extract structured data
+        const lines = text.split('\n').filter(line => line.trim().length > 10);
 
-          const group = getPositionGroup(fakeRow.Position);
-          const league = fakeRow.League;
-          const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(fakeRow, group, league);
-          const valueM = 0.5;
-          const age = parseInt(fakeRow.Age) || 24;
-          const badge = calculateBadge(score, valueM, age);
+        lines.forEach((line, index) => {
+          // Look for common patterns in FM player lists
+          const nameMatch = line.match(/([A-Z][a-zA-Z\s-']{3,30})/);
+          const ageMatch = line.match(/\b(\d{1,2})\b/);
+          const posMatch = line.match(/\b(GK|ST|CM|CDM|CB|WB|AM|Winger|D \(C\)|M \(C\))\b/i);
 
-          allPlayers.push({
-            id: Date.now() + index,
-            rank: allPlayers.length + 1,
-            name: fakeRow.Name,
-            nationality: '🌍',
-            age,
-            position: group,
-            league,
-            valueScore: score,
-            keyStat: 'OCR Extracted',
-            transferValue: fakeRow['Transfer Value'],
-            wage: fakeRow.Wage,
-            rawData: fakeRow,
-            badge,
-            perfPercent,
-            valuePercent,
-            agePercent,
-          });
-        }
-      });
+          if (nameMatch && nameMatch[0].length > 3) {
+            const fakeRow = {
+              Name: nameMatch[0].trim(),
+              Age: ageMatch ? ageMatch[1] : '24',
+              Position: posMatch ? posMatch[0] : 'Unknown',
+              'Transfer Value': '£500K',
+              Wage: '£5K p/w',
+              League: 'Unknown League',
+              Minutes: '2000',
+            };
+
+            const group = getPositionGroup(fakeRow.Position);
+            const league = fakeRow.League;
+            const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(fakeRow, group, league);
+            const valueM = 0.5;
+            const age = parseInt(fakeRow.Age) || 24;
+            const badge = calculateBadge(score, valueM, age);
+
+            allParsedPlayers.push({
+              id: Date.now() + i + index,
+              rank: allParsedPlayers.length + 1,
+              name: fakeRow.Name,
+              nationality: '🌍',
+              age,
+              position: group,
+              league,
+              valueScore: score,
+              keyStat: 'OCR Extracted',
+              transferValue: fakeRow['Transfer Value'],
+              wage: fakeRow.Wage,
+              rawData: fakeRow,
+              badge,
+              perfPercent,
+              valuePercent,
+              agePercent,
+            });
+          }
+        });
+      } catch (err) {
+        console.error('OCR error for file', file.name, err);
+      }
     }
 
-    setPlayers(allPlayers);
-    setUploadMessage({ type: 'success', text: `✅ Processed ${allPlayers.length} players from screenshots (OCR may have some errors)` });
+    if (allParsedPlayers.length > 0) {
+      setPlayers(allParsedPlayers);
+      setUploadMessage({ 
+        type: 'success', 
+        text: `✅ Processed ${allParsedPlayers.length} players from screenshots (OCR may have some errors - check the table)` 
+      });
+    } else {
+      setUploadMessage({ type: 'error', text: 'No players could be extracted from the screenshots. Try clearer images or use CSV export instead.' });
+    }
+
     setScreenshotProcessing(false);
   };
 
@@ -275,14 +287,11 @@ export default function FMValueScoutV5() {
     if (file.name.toLowerCase().endsWith('.csv')) {
       parseAndProcessCSV(file);
     } else if (file.type.startsWith('image/')) {
-      // For single image, treat as screenshot
       const dt = new DataTransfer();
       dt.items.add(file);
       handleScreenshotUpload(dt.files);
     }
   };
-
-  // Rest of the code (table, squad builder, exports, modal, etc.) remains the same as the last full V5
 
   const filteredPlayers = useMemo(() => {
     return selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter);
@@ -333,15 +342,77 @@ export default function FMValueScoutV5() {
     getSortedRowModel: getSortedRowModel(),
   });
 
-  const exportShortlistCSV = () => { /* unchanged */ };
-  const exportShortlistPDF = () => { /* unchanged */ };
+  const exportShortlistCSV = () => {
+    if (shortlist.length === 0) return;
+    const csvContent = "data:text/csv;charset=utf-8," + shortlist.map(p => `${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`).join('\n');
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", "value-scout-shortlist.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  const handleDragStart = (e: React.DragEvent, player: Player) => { /* unchanged */ };
-  const handleDrop = (e: React.DragEvent) => { /* unchanged */ };
+  const exportShortlistPDF = () => {
+    if (shortlist.length === 0) return;
+    const doc = new jsPDF();
+    doc.text("FM Value Scout V5 - Shortlist", 14, 20);
+    autoTable(doc, {
+      startY: 30,
+      head: [['Player', 'Position', 'Age', 'League', 'Score', 'Value', 'Wage']],
+      body: shortlist.map(p => [p.name, p.position, p.age, p.league, p.valueScore, p.transferValue, p.wage]),
+      theme: 'grid',
+      headStyles: { fillColor: [139, 92, 246] }
+    });
+    doc.save("ValueScout_Shortlist.pdf");
+  };
 
-  const squadStats = useMemo(() => { /* unchanged */ }, [squad]);
+  const handleDragStart = (e: React.DragEvent, player: Player) => {
+    e.dataTransfer.setData('playerId', player.id.toString());
+  };
 
-  const getStatColor = (key: string, value: any, position: string) => { /* unchanged */ };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const playerId = parseInt(e.dataTransfer.getData('playerId'));
+    const player = shortlist.find(p => p.id === playerId);
+    if (player && !squad.find(p => p.id === player.id)) {
+      setSquad([...squad, player]);
+    }
+  };
+
+  const squadStats = useMemo(() => {
+    if (squad.length === 0) return { avgScore: '0.0', totalWage: '0', avgAge: '0.0', gems: 0 };
+    const totalScore = squad.reduce((sum, p) => sum + p.valueScore, 0);
+    const totalWage = squad.reduce((sum, p) => {
+      const wageNum = parseFloat(p.wage.replace(/[^0-9.-]/g, '')) || 0;
+      return sum + wageNum;
+    }, 0);
+    const totalAge = squad.reduce((sum, p) => sum + p.age, 0);
+    const gems = squad.filter(p => p.badge.type === 'gem').length;
+
+    return {
+      avgScore: (totalScore / squad.length).toFixed(1),
+      totalWage: totalWage.toFixed(0),
+      avgAge: (totalAge / squad.length).toFixed(1),
+      gems
+    };
+  }, [squad]);
+
+  const getStatColor = (key: string, value: any, position: string) => {
+    const num = parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0;
+    if (num === 0) return 'text-red-400';
+
+    if (['Central Defender', 'CDM', 'Wing Back'].includes(position)) {
+      if (key.toLowerCase().includes('tck') || key.toLowerCase().includes('itc') || key.toLowerCase().includes('tackles') || key.toLowerCase().includes('interceptions')) {
+        return num > 40 ? 'text-emerald-400' : num > 20 ? 'text-amber-400' : 'text-red-400';
+      }
+    } else if (['Striker', 'Attacking Mid', 'Winger'].includes(position)) {
+      if (key.toLowerCase().includes('xg') || key.toLowerCase().includes('goals') || key.toLowerCase().includes('shots')) {
+        return num > 0.8 ? 'text-emerald-400' : num > 0.4 ? 'text-amber-400' : 'text-red-400';
+      }
+    }
+    return 'text-zinc-100';
+  };
 
   return (
     <div className="min-h-screen bg-[#0F0A1F] text-zinc-100">
@@ -352,7 +423,7 @@ export default function FMValueScoutV5() {
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
             <div>
               <div className="text-3xl font-bold">FM Value Scout</div>
-              <div className="text-xs text-violet-400 -mt-1">V5 • Screenshot Backup Added</div>
+              <div className="text-xs text-violet-400 -mt-1">V5 • Screenshot Backup</div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -391,10 +462,10 @@ export default function FMValueScoutV5() {
 
         {/* Main Content */}
         <div className="flex-1">
-          <div className="flex border-b border-violet-900/50 mb-8">
+          <div className="flex border-b border-violet-900/50 mb-8 overflow-x-auto">
             {['upload', 'howto', 'filters', 'squad', 'compare', 'screenshot'].map((tab) => (
               <button key={tab} onClick={() => setActiveTab(tab as any)}
-                className={`px-8 py-4 font-medium transition flex items-center gap-2 ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}>
+                className={`px-8 py-4 font-medium transition flex items-center gap-2 whitespace-nowrap ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}>
                 {tab === 'upload' && 'Upload CSV'}
                 {tab === 'howto' && <><HelpCircle className="w-4 h-4" /> How to Use</>}
                 {tab === 'filters' && 'Export Filters'}
@@ -405,14 +476,54 @@ export default function FMValueScoutV5() {
             ))}
           </div>
 
-          {/* Existing tabs unchanged */}
-          {activeTab === 'upload' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Upload a CSV file to get started</div>)}
-          {activeTab === 'howto' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">How to Use guide coming soon</div>)}
-          {activeTab === 'filters' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Export Filters coming soon</div>)}
-          {activeTab === 'squad' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Squad Builder coming soon</div>)}
-          {activeTab === 'compare' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Player Comparison (coming soon)</div>}
+          {/* Upload Tab */}
+          {activeTab === 'upload' && (
+            <div>
+              <div className={`bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center transition-all ${isDragging ? 'border-violet-500 bg-violet-950/30' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); }}>
+                <Upload className="w-16 h-16 mx-auto mb-6 text-violet-400" />
+                <h2 className="text-2xl font-semibold mb-3">Drop your FM CSV here</h2>
+                <label className="bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
+                  Choose CSV File
+                  <input type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
+                </label>
+                {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : uploadMessage.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
+              </div>
 
-          {/* NEW Screenshot Upload Tab */}
+              {players.length > 0 && (
+                <div className="mt-8 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      {table.getHeaderGroups().map(headerGroup => (
+                        <tr key={headerGroup.id} className="border-b border-violet-900/50 bg-zinc-950">
+                          {headerGroup.headers.map(header => (
+                            <th key={header.id} className="px-8 py-5 text-left text-sm font-medium text-zinc-400">
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
+                    </thead>
+                    <tbody>
+                      {table.getRowModel().rows.map(row => (
+                        <tr key={row.id} className="border-b border-violet-900/30 hover:bg-violet-950/30">
+                          {row.getVisibleCells().map(cell => (
+                            <td key={cell.id} className="px-8 py-6">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Screenshot Tab - FIXED */}
           {activeTab === 'screenshot' && (
             <div>
               <div className="bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center">
@@ -432,7 +543,7 @@ export default function FMValueScoutV5() {
                     onChange={(e) => e.target.files && handleScreenshotUpload(e.target.files)} 
                   />
                 </label>
-                {screenshotProcessing && <div className="mt-6 text-amber-400">Processing screenshots with OCR... Please wait.</div>}
+                {screenshotProcessing && <div className="mt-6 text-amber-400">Processing screenshots with OCR... Please wait (10-30s per image).</div>}
                 {uploadMessage && <div className={`mt-8 text-sm ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>{uploadMessage.text}</div>}
               </div>
 
@@ -441,6 +552,12 @@ export default function FMValueScoutV5() {
               </div>
             </div>
           )}
+
+          {/* Other tabs (howto, filters, squad, compare) - keep your existing content */}
+          {activeTab === 'howto' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">How to Use guide coming soon</div>)}
+          {activeTab === 'filters' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Export Filters coming soon</div>)}
+          {activeTab === 'squad' && (<div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Squad Builder coming soon</div>)}
+          {activeTab === 'compare' && <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-center text-zinc-400">Player Comparison (coming soon)</div>}
         </div>
 
         {/* About Sidebar unchanged */}
@@ -463,18 +580,64 @@ export default function FMValueScoutV5() {
         </div>
       </div>
 
-      {/* Player Modal unchanged - clean with three bars and colored stats */}
+      {/* Player Modal unchanged */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
-            {/* Same clean modal as before - three bars + colored stats grid */}
-            {/* ... (paste the modal content from the previous clean version) ... */}
+            {/* Same clean modal with three bars and colored stats grid as before */}
+            <div className="p-8 border-b border-violet-900/50 flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <span className="text-5xl">{selectedPlayer.nationality}</span>
+                <div>
+                  <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
+                  <p className="text-emerald-400">{selectedPlayer.position} • {selectedPlayer.league} • Age {selectedPlayer.age}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedPlayer(null)} className="text-zinc-400 hover:text-white">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="p-8">
+              <div className="text-center mb-10">
+                <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
+                <div className="text-xl text-zinc-400">Value Score</div>
+                {selectedPlayer.badge.icon && <div className="text-5xl mt-6">{selectedPlayer.badge.icon} {selectedPlayer.badge.label}</div>}
+              </div>
+
+              <div className="space-y-8 mb-12">
+                <div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
+                </div>
+              </div>
+
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5" /> All Exported Stats</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {Object.entries(selectedPlayer.rawData).map(([key, value]) => (
+                  <div key={key} className="bg-zinc-800 p-4 rounded-2xl">
+                    <div className="text-zinc-400 text-xs uppercase tracking-widest">{key}</div>
+                    <div className={`font-medium mt-1 break-all ${getStatColor(key, value, selectedPlayer.position)}`}>
+                      {String(value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       <footer className="border-t border-violet-900/50 py-8 text-center text-xs text-zinc-500">
-        Made with ❤️ for the FM community • FM Value Scout 
+        Made with ❤️ for the FM community • FM Value Scout V5
       </footer>
     </div>
   );

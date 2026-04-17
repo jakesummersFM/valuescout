@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import {
-  Upload, Download, X, BarChart3, Heart, FileText, Twitch, Twitter,
+  Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign,
   Users, HelpCircle, Trash2, Copy, Image as ImageIcon, ChevronUp,
   ChevronDown, Star, AlertTriangle, TrendingUp, Shield, Zap, Eye,
   CheckCircle, Info, ArrowRight, Grid, List
@@ -814,7 +814,7 @@ export default function FMValueScoutV5() {
                 <div style={{ fontSize: 14, color: '#a1a1aa' }}>Formation:</div>
                 {Object.keys(FORMATION_SLOTS).map(f => (
                   <button key={f} onClick={() => { setFormation(f); setSquad(Array(FORMATION_SLOTS[f].length).fill(null)); }} style={{
-                    padding: '6px 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer', border: 'none',
+                    padding: '6px 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
                     background: formation === f ? '#7c3aed' : 'rgba(24,18,43,0.8)',
                     color: formation === f ? 'white' : '#a1a1aa',
                     border: formation === f ? 'none' : '0.5px solid rgba(139,92,246,0.25)',
@@ -1153,10 +1153,10 @@ export default function FMValueScoutV5() {
       <footer style={{ borderTop: '0.5px solid rgba(139,92,246,0.2)', padding: '24px', textAlign: 'center', fontSize: 12, color: '#52525b', marginTop: 40 }}>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 12 }}>
           <a href="https://twitter.com/JakeSummersFM"   target="_blank" style={{ color: '#71717a', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-            <Twitter size={14} style={{ color: '#38bdf8' }} /> @JakeSummersFM
+            <AtSign size={14} style={{ color: '#38bdf8' }} /> @JakeSummersFM
           </a>
           <a href="https://www.twitch.tv/jakesummersfm" target="_blank" style={{ color: '#71717a', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
-            <Twitch size={14} style={{ color: '#a78bfa' }} /> Twitch
+            <Tv size={14} style={{ color: '#a78bfa' }} /> Twitch
           </a>
           <a href="https://ko-fi.com/jakesummersfm"     target="_blank" style={{ color: '#71717a', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
             <Heart size={14} style={{ color: '#f87171' }} /> Ko-fi

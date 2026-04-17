@@ -101,7 +101,7 @@ function getPositionGroup(pos: string): string {
   if (p.includes('cm') || p.includes('m (c)')) return 'Centre Mid';
   if (p.includes('winger') || p.includes('rw') || p.includes('lw') || p.includes('m/am (r') || p.includes('m/am (l')) return 'Winger';
   if (p.includes('st') || p.includes('cf') || p.includes('fw')) return 'Striker';
-  return 'Central Defender';
+  return 'Striker';
 }
 
 function getLeagueMultiplier(league: string): number {
@@ -123,48 +123,41 @@ function parseNum(row: Record<string, unknown>, keys: string[], def = 0): number
 }
 
 function calculateValueScore(row: Record<string, unknown>, position: string, league: string, balanced: boolean) {
-  const minutes = parseNum(row, ['Minutes', 'Mins', 'Min'], 90) || 90;
+  const minutes = parseNum(row, ['Mins', 'Minutes'], 1800) || 1800;
   const per90 = (s: number) => (minutes > 0 ? s / (minutes / 90) : s);
 
-  const goals        = per90(parseNum(row, ['Goals', 'Gls']));
-  const assists      = per90(parseNum(row, ['Assists', 'Ast']));
-  const xG           = per90(parseNum(row, ['xG']));
-  const keyPasses    = per90(parseNum(row, ['Key Passes', 'KP', 'Key']));
-  const shots        = per90(parseNum(row, ['Shots', 'Sh']));
-  const tackles      = per90(parseNum(row, ['Tackles', 'Tck C', 'Tck']));
-  const interceptions = per90(parseNum(row, ['Interceptions', 'Itc']));
-  const savePct      = parseNum(row, ['Sv %', 'Save %']);
-  const cleanSheets  = parseNum(row, ['Clean Sheets', 'CS']);
+  const goalsPer90 = parseNum(row, ['Gls/90']);
+  const xGTotal = parseNum(row, ['xG']);
+  const xGPer90 = per90(xGTotal);
+  const shotConversion = parseNum(row, ['Shot %']) / 100 || 0.5;
 
   let performance = 0;
-  if (position === 'GK') {
-    performance = Math.min(42, savePct * 1.85 + (cleanSheets / (minutes / 90)) * 8);
+  if (position === 'Striker' || position.includes('ST') || position.includes('AM')) {
+    performance = (goalsPer90 * 48) + (xGPer90 * 32) + (shotConversion * 20);
   } else if (['Central Defender', 'CDM', 'Wing Back'].includes(position)) {
-    performance = tackles * 4.2 + interceptions * 4.0 + keyPasses * 1.5 + minutes / 100;
+    performance = 30;
   } else {
-    const xgBonus = xG > 0 ? (goals / xG) * 50 : goals * 40;
-    performance = goals * 3.8 + assists * 2.4 + xgBonus + shots * 0.9 + keyPasses * 1.8;
+    performance = (goalsPer90 * 40) + (xGPer90 * 30);
   }
 
   const leagueMultiplier = getLeagueMultiplier(league);
-  const baseScore = performance * 2.45;
+  const baseScore = performance * 2.8;
   const valueM = Math.max(0.3, parseNum(row, ['Transfer Value'], 0.5));
   const wageK  = Math.max(0.5, (parseNum(row, ['Wage'], 1000)) / 1000);
-  const efficiency = Math.min(45, Math.max(25, 88 / (valueM * 0.45 + wageK * 0.55)));
+  const efficiency = Math.min(48, Math.max(22, 92 / (valueM * 0.4 + wageK * 0.6)));
 
   const age = parseInt(String(row.Age ?? 25)) || 25;
-  const ageBonus = age <= 21 ? 16 : age <= 23 ? 11 : age <= 26 ? 7 : age >= 33 ? -12 : 0;
-  const minutesFactor = minutes < 800 ? 0.65 : minutes < 1200 ? 0.78 : 1.0;
+  const ageBonus = age <= 23 ? 16 : age <= 27 ? 9 : age >= 33 ? -14 : 0;
 
-  let final = ((baseScore * 0.55) + (efficiency * 0.33) + ageBonus) * minutesFactor * leagueMultiplier;
-  if (balanced) final *= 0.92;
+  let final = ((baseScore * 0.58) + (efficiency * 0.32) + ageBonus) * leagueMultiplier;
+  if (balanced) final *= 0.9;
 
   const score = Math.max(48, Math.min(97, Math.round(final)));
   const denom = Math.max(final, 1);
   return {
     score,
-    perfPercent:  Math.min(100, Math.round((baseScore  * 0.55 / denom) * 100)) || 65,
-    valuePercent: Math.min(100, Math.round((efficiency * 0.33 / denom) * 100)) || 60,
+    perfPercent:  Math.min(100, Math.round((baseScore  * 0.58 / denom) * 100)) || 65,
+    valuePercent: Math.min(100, Math.round((efficiency * 0.32 / denom) * 100)) || 60,
     agePercent:   Math.min(100, Math.round((Math.abs(ageBonus) / denom) * 100)) || 45,
   };
 }
@@ -328,7 +321,7 @@ export default function FMValueScoutV5() {
         ? `Sv%: ${row['Sv %'] ?? '-'}`
         : ['CDM', 'Wing Back', 'Central Defender'].includes(group)
           ? `Tck: ${row['Tck C'] ?? '-'} | Itc: ${row['Itc'] ?? '-'}`
-          : `Key: ${row['Key'] ?? row['Key Passes'] ?? '-'}`,
+          : `Gls/90: ${row['Gls/90'] ?? '-'}`,
       transferValue: String(row['Transfer Value'] ?? '£0'),
       wage: String(row.Wage ?? '£0'),
       rawData: row,

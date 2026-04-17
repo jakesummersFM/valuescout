@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Papa from 'papaparse';
 import Tesseract from 'tesseract.js';
 import { X, Heart, Copy, Image as ImageIcon, AlertTriangle, Save } from 'lucide-react';
 import { useReactTable, getCoreRowModel, getSortedRowModel, SortingState, flexRender } from '@tanstack/react-table';
 
 type PlayerRawData = Record<string, string | number | undefined>;
-type AppTab = 'upload' | 'howto' | 'filters' | 'squad' | 'screenshot';
 
 interface Player {
   id: number;
@@ -29,14 +29,14 @@ interface Player {
 
 export default function FMValueScoutV5() {
   const [players, setPlayers] = useState<Player[]>([]);
-  const [shortlist] = useState<Player[]>([]);
+  const [shortlist, setShortlist] = useState<Player[]>([]);
   const [squad, setSquad] = useState<Player[]>([]);
-  const selectedPositionFilter = 'All';
+  const [selectedPositionFilter, setSelectedPositionFilter] = useState('All');
   const [sorting, setSorting] = useState<SortingState>([{ id: 'valueScore', desc: true }]);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('upload');
-  const balancedMode = false;
+  const [activeTab, setActiveTab] = useState<'upload' | 'howto' | 'filters' | 'squad' | 'screenshot'>('upload');
+  const [balancedMode, setBalancedMode] = useState(false);
   const [screenshotProcessing, setScreenshotProcessing] = useState(false);
   const [copiedName, setCopiedName] = useState<string | null>(null);
 
@@ -55,13 +55,6 @@ export default function FMValueScoutV5() {
     { label: 'Winger', value: 'Winger' },
     { label: 'ST', value: 'Striker' },
   ];
-
-  const recommendedColumns: Record<string, string[]> = {
-    'GK': ['Name', 'Age', 'Position', 'Save %', 'Clean Sheets', 'Minutes'],
-    'Defender': ['Name', 'Age', 'Position', 'Tackles', 'Interceptions', 'Clearances', 'Minutes'],
-    'Midfielder': ['Name', 'Age', 'Position', 'Goals', 'Assists', 'Key Passes', 'Minutes'],
-    'Attacker': ['Name', 'Age', 'Position', 'Goals', 'Assists', 'xG', 'Shots', 'Minutes'],
-  };
 
   const getPositionGroup = (pos: string): string => {
     const p = (pos || '').toLowerCase();
@@ -134,10 +127,9 @@ export default function FMValueScoutV5() {
     return { type: 'none' as const, label: '', icon: '' };
   };
 
-  // Improved OCR + Manual Editor
   const handleScreenshotUpload = async (files: FileList) => {
     setScreenshotProcessing(true);
-    setUploadMessage({ type: 'warning', text: 'Processing screenshots with improved OCR...' });
+    setUploadMessage({ type: 'warning', text: 'Processing screenshots with OCR...' });
 
     const allParsedPlayers: Player[] = [];
 
@@ -188,9 +180,9 @@ export default function FMValueScoutV5() {
     if (allParsedPlayers.length > 0) {
       setEditingPlayers([...allParsedPlayers]);
       setShowEditor(true);
-      setUploadMessage({ type: 'success', text: `Detected ${allParsedPlayers.length} players — now editing` });
+      setUploadMessage({ type: 'success', text: `Detected ${allParsedPlayers.length} players — edit then save` });
     } else {
-      setUploadMessage({ type: 'error', text: 'No players detected. Try clearer screenshots.' });
+      setUploadMessage({ type: 'error', text: 'No players detected.' });
     }
     setScreenshotProcessing(false);
   };
@@ -203,12 +195,12 @@ export default function FMValueScoutV5() {
     });
     setPlayers(scoredPlayers);
     setShowEditor(false);
-    setUploadMessage({ type: 'success', text: `Saved ${scoredPlayers.length} players with updated scores` });
+    setUploadMessage({ type: 'success', text: `Saved ${scoredPlayers.length} players with scores` });
   };
 
-  const filteredPlayers = useMemo(() =>
+  const filteredPlayers = useMemo(() => 
     selectedPositionFilter === 'All' ? players : players.filter(p => p.position === selectedPositionFilter),
-  [players]);
+  [players, selectedPositionFilter]);
 
   const table = useReactTable({
     data: filteredPlayers,
@@ -243,71 +235,86 @@ export default function FMValueScoutV5() {
     getSortedRowModel: getSortedRowModel(),
   });
 
-  // Squad Builder Helpers
-  const squadStats = useMemo(() => {
-    if (squad.length === 0) return { avgScore: '0.0', totalWage: '0', avgAge: '0.0', gems: 0 };
-    const avgScore = (squad.reduce((sum, p) => sum + p.valueScore, 0) / squad.length).toFixed(1);
-    const totalWage = squad.reduce((sum, p) => sum + (parseFloat(p.wage.replace(/[^0-9.]/g, '')) || 0), 0).toFixed(0);
-    const avgAge = (squad.reduce((sum, p) => sum + p.age, 0) / squad.length).toFixed(1);
-    const gems = squad.filter(p => p.badge.type === 'gem').length;
-    return { avgScore, totalWage, avgAge, gems };
-  }, [squad]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const playerId = parseInt(e.dataTransfer.getData('playerId'));
-    const player = shortlist.find(p => p.id === playerId) || players.find(p => p.id === playerId);
-    if (player && !squad.find(p => p.id === player.id)) {
-      setSquad([...squad, player]);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#0F0A1F] text-zinc-100">
-      <nav className="border-b border-violet-900/50 bg-[#0F0A1F]/90 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+      {/* Navigation - Fixed Layout */}
+      <nav className="border-b border-violet-900/50 bg-[#0F0A1F]/95 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-2xl font-bold">VS</div>
-            <div className="text-3xl font-bold">FM Value Scout <span className="text-xs text-violet-400">V5 Full</span></div>
+            <div>
+              <div className="text-3xl font-bold tracking-tight">FM Value Scout</div>
+              <div className="text-xs text-violet-400 -mt-1">V5 Full</div>
+            </div>
           </div>
-          <a href="https://ko-fi.com/jakesummersfm" target="_blank" className="flex items-center gap-2 text-sm hover:text-red-400">
+          <a href="https://ko-fi.com/jakesummersfm" target="_blank" className="flex items-center gap-2 text-sm hover:text-red-400 transition">
             <Heart className="w-4 h-4" /> Support
           </a>
         </div>
+
+        {/* Tabs - Clean Horizontal */}
+        <div className="border-t border-violet-900/50">
+          <div className="max-w-7xl mx-auto px-6 flex">
+            {(['upload', 'howto', 'filters', 'squad', 'screenshot'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-8 py-4 font-medium transition border-b-2 -mb-px ${
+                  activeTab === tab 
+                    ? 'border-violet-500 text-white' 
+                    : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {tab === 'upload' && 'Upload CSV'}
+                {tab === 'howto' && 'How to Use'}
+                {tab === 'filters' && 'Export Filters'}
+                {tab === 'squad' && 'Squad Builder'}
+                {tab === 'screenshot' && 'Screenshot Upload'}
+              </button>
+            ))}
+          </div>
+        </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex border-b border-violet-900/50 mb-8 overflow-x-auto">
-          {(['upload', 'howto', 'filters', 'squad', 'screenshot'] as AppTab[]).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-8 py-4 font-medium whitespace-nowrap ${activeTab === tab ? 'border-b-2 border-violet-500 text-violet-400' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              {tab === 'upload' && 'Upload CSV'}
-              {tab === 'howto' && 'How to Use'}
-              {tab === 'filters' && 'Export Filters'}
-              {tab === 'squad' && 'Squad Builder'}
-              {tab === 'screenshot' && 'Screenshot Upload'}
-            </button>
-          ))}
-        </div>
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        {/* Screenshot Tab */}
+        {activeTab === 'screenshot' && (
+          <div>
+            <div className="bg-amber-950 border border-amber-700 rounded-2xl p-6 mb-10 flex gap-4">
+              <AlertTriangle className="w-6 h-6 text-amber-400 mt-1 flex-shrink-0" />
+              <div className="text-sm text-amber-300">
+                <strong>OCR is experimental.</strong> Use clear screenshots. You can edit data after upload before scoring.
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center">
+              <ImageIcon className="w-16 h-16 mx-auto mb-6 text-violet-400" />
+              <h2 className="text-2xl font-semibold mb-3">Upload Screenshots of Player Lists</h2>
+              <p className="text-zinc-400 mb-8 max-w-md mx-auto">Take clear screenshots of FM26 player lists or individual players.</p>
+              <label className="bg-violet-600 hover:bg-violet-500 px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
+                Choose Screenshots
+                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && handleScreenshotUpload(e.target.files)} />
+              </label>
+              {screenshotProcessing && <p className="mt-8 text-amber-400">Processing with OCR...</p>}
+              {uploadMessage && <p className={`mt-8 ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>{uploadMessage.text}</p>}
+            </div>
+          </div>
+        )}
 
         {/* How to Use Tab */}
         {activeTab === 'howto' && (
-          <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 space-y-10 text-zinc-300">
-            <div>
-              <h2 className="text-3xl font-bold mb-6 text-white">How to Use FM Value Scout</h2>
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-xl font-semibold text-emerald-400 mb-3">1. Best Method: CSV Export (Recommended)</h3>
-                  <p>Use the BepInEx Player Export mod in FM26 → select players → press F9 or Ctrl+P → upload the CSV here.</p>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-amber-400 mb-3">2. No-Mod Method: Screenshot Upload</h3>
-                  <p>Take clear screenshots of player lists → upload here → edit data if needed → scores will be calculated.</p>
-                  <p className="text-sm text-amber-400 mt-2">OCR is experimental. Clear, high-resolution screenshots work best.</p>
-                </div>
+          <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10 text-zinc-300">
+            <h2 className="text-3xl font-bold mb-8 text-white">How to Use FM Value Scout</h2>
+            <div className="space-y-10">
+              <div>
+                <h3 className="text-xl font-semibold text-emerald-400 mb-3">1. Best Way: CSV Export (Recommended)</h3>
+                <p className="mb-4">Install the BepInEx Player Export mod in FM26 → select your players → press F9 or Ctrl+P → save the CSV → upload it here.</p>
+                <p className="text-sm text-zinc-400">This gives the most accurate and rich data for scoring.</p>
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-amber-400 mb-3">2. No-Mod Alternative: Screenshot Upload</h3>
+                <p>Take clear screenshots of player lists in FM26 → upload them → edit any mistakes → click Save & Calculate.</p>
+                <p className="text-sm text-amber-400 mt-2">OCR is not perfect — editing helps a lot.</p>
               </div>
             </div>
           </div>
@@ -316,15 +323,20 @@ export default function FMValueScoutV5() {
         {/* Export Filters Tab */}
         {activeTab === 'filters' && (
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10">
-            <h2 className="text-3xl font-bold mb-8">Recommended Export Filters</h2>
+            <h2 className="text-3xl font-bold mb-8">Recommended Export Filters per Position</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.keys(recommendedColumns || {}).map(pos => (
+              {Object.entries({
+                'GK': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Save %', 'Clean Sheets'],
+                'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Interceptions'],
+                'CDM': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Interceptions', 'Key Passes'],
+                'Wing Back': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tackles', 'Interceptions', 'Assists'],
+                'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Goals', 'Assists', 'Shots', 'xG'],
+              }).map(([pos, cols]) => (
                 <div key={pos} className="bg-zinc-800 p-6 rounded-2xl">
-                  <h3 className="font-semibold mb-4">{pos}</h3>
+                  <h3 className="font-semibold mb-4 text-violet-300">{pos}</h3>
                   <ul className="text-sm text-zinc-400 space-y-1">
-                    {(recommendedColumns[pos] || []).map(col => <li key={col}>• {col}</li>)}
+                    {cols.map(col => <li key={col}>• {col}</li>)}
                   </ul>
-                  <button className="mt-6 text-violet-400 hover:text-violet-300 text-sm">Download Filter Preset (coming soon)</button>
                 </div>
               ))}
             </div>
@@ -336,48 +348,36 @@ export default function FMValueScoutV5() {
           <div className="bg-zinc-900/80 border border-violet-900/50 rounded-3xl p-10">
             <h2 className="text-3xl font-bold mb-6">Squad Builder</h2>
             <div 
-              className="bg-zinc-950 border-2 border-dashed border-violet-700 h-96 rounded-3xl flex items-center justify-center text-zinc-400"
-              onDrop={handleDrop}
+              className="bg-zinc-950 border-2 border-dashed border-violet-700 h-96 rounded-3xl flex items-center justify-center text-zinc-400 text-lg"
+              onDrop={(e) => { e.preventDefault(); alert('Drag & drop from shortlist coming in next update'); }}
               onDragOver={(e) => e.preventDefault()}
             >
-              Drop players from shortlist here (formation view coming soon)
+              Drag players from your shortlist onto the pitch (formation view coming soon)
             </div>
-            <div className="mt-8 grid grid-cols-4 gap-4 text-center">
-              <div>Avg Score: <span className="text-emerald-400 font-bold">{squadStats.avgScore}</span></div>
-              <div>Total Wage: <span className="text-violet-400 font-bold">£{squadStats.totalWage}k</span></div>
-              <div>Avg Age: <span className="text-purple-400 font-bold">{squadStats.avgAge}</span></div>
-              <div>Hidden Gems: <span className="text-amber-400 font-bold">{squadStats.gems}</span></div>
-            </div>
-          </div>
-        )}
-
-        {/* Screenshot Tab */}
-        {activeTab === 'screenshot' && (
-          <div>
-            <div className="bg-amber-950 border border-amber-700 rounded-2xl p-6 mb-8 flex gap-4">
-              <AlertTriangle className="w-6 h-6 text-amber-400 mt-1" />
-              <div className="text-sm text-amber-300">
-                OCR is experimental. After upload you can manually edit data before scoring.
+            <div className="mt-8 grid grid-cols-4 gap-6 text-center">
+              <div className="bg-zinc-800 p-6 rounded-2xl">
+                <div className="text-xs text-zinc-400">AVG SCORE</div>
+                <div className="text-3xl font-bold text-emerald-400">0.0</div>
+              </div>
+              <div className="bg-zinc-800 p-6 rounded-2xl">
+                <div className="text-xs text-zinc-400">TOTAL WAGE</div>
+                <div className="text-3xl font-bold text-violet-400">£0k</div>
+              </div>
+              <div className="bg-zinc-800 p-6 rounded-2xl">
+                <div className="text-xs text-zinc-400">AVG AGE</div>
+                <div className="text-3xl font-bold text-purple-400">0.0</div>
+              </div>
+              <div className="bg-zinc-800 p-6 rounded-2xl">
+                <div className="text-xs text-zinc-400">HIDDEN GEMS</div>
+                <div className="text-3xl font-bold text-amber-400">0</div>
               </div>
             </div>
-
-            <div className="bg-zinc-900/80 border-2 border-dashed border-violet-700 rounded-3xl p-16 text-center">
-              <ImageIcon className="w-16 h-16 mx-auto mb-6 text-violet-400" />
-              <h2 className="text-2xl font-semibold mb-3">Upload Screenshots of Player Lists</h2>
-              <p className="text-zinc-400 mb-8">Take clear screenshots of FM26 player lists.</p>
-              <label className="bg-violet-600 hover:bg-violet-500 px-10 py-4 rounded-2xl font-semibold cursor-pointer inline-block">
-                Choose Screenshots
-                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => e.target.files && handleScreenshotUpload(e.target.files)} />
-              </label>
-              {screenshotProcessing && <p className="mt-8 text-amber-400">Processing with OCR...</p>}
-              {uploadMessage && <p className={`mt-8 ${uploadMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>{uploadMessage.text}</p>}
-            </div>
           </div>
         )}
 
-        {/* Main Table */}
+        {/* Main Results Table */}
         {players.length > 0 && (
-          <div className="mt-10 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
+          <div className="mt-12 bg-zinc-900/80 border border-violet-900/50 rounded-3xl overflow-hidden">
             <table className="w-full">
               <thead>
                 {table.getHeaderGroups().map(hg => (
@@ -404,49 +404,64 @@ export default function FMValueScoutV5() {
             </table>
           </div>
         )}
+
+        {players.length === 0 && activeTab !== 'howto' && activeTab !== 'filters' && activeTab !== 'squad' && (
+          <div className="text-center py-24 text-zinc-500">
+            Select a tab above to get started
+          </div>
+        )}
       </div>
 
-      {/* Manual Editor */}
+      {/* Manual Editor Modal */}
       {showEditor && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[110] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-auto">
-            <div className="p-8 border-b flex justify-between">
+            <div className="p-8 border-b flex justify-between items-center">
               <h2 className="text-2xl font-bold">Edit Detected Players</h2>
-              <button onClick={() => setShowEditor(false)}><X className="w-8 h-8" /></button>
+              <button onClick={() => setShowEditor(false)} className="text-zinc-400 hover:text-white"><X className="w-8 h-8" /></button>
             </div>
             <div className="p-8 space-y-6">
               {editingPlayers.map((player, index) => (
                 <div key={player.id} className="grid grid-cols-3 gap-6 bg-zinc-800 p-6 rounded-2xl">
-                  <input 
-                    value={player.name} 
-                    onChange={(e) => {
-                      const newList = [...editingPlayers];
-                      newList[index].name = e.target.value;
-                      setEditingPlayers(newList);
-                    }}
-                    className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
-                  />
-                  <input 
-                    type="number" 
-                    value={player.age} 
-                    onChange={(e) => {
-                      const newList = [...editingPlayers];
-                      newList[index].age = parseInt(e.target.value) || 22;
-                      setEditingPlayers(newList);
-                    }}
-                    className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
-                  />
-                  <select 
-                    value={player.position} 
-                    onChange={(e) => {
-                      const newList = [...editingPlayers];
-                      newList[index].position = e.target.value;
-                      setEditingPlayers(newList);
-                    }}
-                    className="bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
-                  >
-                    {positionFilters.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </select>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Name</label>
+                    <input 
+                      value={player.name} 
+                      onChange={(e) => {
+                        const newList = [...editingPlayers];
+                        newList[index].name = e.target.value;
+                        setEditingPlayers(newList);
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Age</label>
+                    <input 
+                      type="number" 
+                      value={player.age} 
+                      onChange={(e) => {
+                        const newList = [...editingPlayers];
+                        newList[index].age = parseInt(e.target.value) || 22;
+                        setEditingPlayers(newList);
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Position</label>
+                    <select 
+                      value={player.position} 
+                      onChange={(e) => {
+                        const newList = [...editingPlayers];
+                        newList[index].position = e.target.value;
+                        setEditingPlayers(newList);
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3"
+                    >
+                      {positionFilters.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
             </div>
@@ -460,34 +475,36 @@ export default function FMValueScoutV5() {
         </div>
       )}
 
-      {/* Player Modal */}
+      {/* Player Modal with 3 bars */}
       {selectedPlayer && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4">
           <div className="bg-zinc-900 border border-violet-900/50 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-auto">
-            <div className="p-8 border-b flex justify-between">
+            <div className="p-8 border-b flex justify-between items-start">
               <div>
                 <h2 className="text-3xl font-bold">{selectedPlayer.name}</h2>
                 <p className="text-emerald-400">{selectedPlayer.position} • Age {selectedPlayer.age}</p>
               </div>
               <button onClick={() => setSelectedPlayer(null)}><X className="w-8 h-8" /></button>
             </div>
+
             <div className="p-8">
               <div className="text-center mb-10">
                 <div className="text-8xl font-bold text-emerald-400">{selectedPlayer.valueScore}</div>
+                <div className="text-xl text-zinc-400">Value Score</div>
               </div>
 
               <div className="space-y-8 mb-12">
                 <div>
-                  <div className="flex justify-between mb-2"><span>Performance</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-emerald-500" style={{width: `${selectedPlayer.perfPercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Performance (Stats)</span><span className="font-mono text-emerald-400">{selectedPlayer.perfPercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${selectedPlayer.perfPercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-violet-500" style={{width: `${selectedPlayer.valuePercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Value for Money</span><span className="font-mono text-violet-400">{selectedPlayer.valuePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${selectedPlayer.valuePercent}%` }} /></div>
                 </div>
                 <div>
-                  <div className="flex justify-between mb-2"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
-                  <div className="h-4 bg-zinc-800 rounded-full"><div className="h-full bg-purple-500" style={{width: `${selectedPlayer.agePercent}%`}} /></div>
+                  <div className="flex justify-between mb-2 text-sm"><span>Age Factor</span><span className="font-mono text-purple-400">{selectedPlayer.agePercent}%</span></div>
+                  <div className="h-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${selectedPlayer.agePercent}%` }} /></div>
                 </div>
               </div>
             </div>

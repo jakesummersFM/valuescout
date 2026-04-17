@@ -300,6 +300,42 @@ export default function FMValueScoutV5() {
 
   // ── Processing ──────────────────────────────────────────────────────────────
 
+  const parseFMHTMLTable = useCallback((htmlContent: string): Record<string, unknown>[] => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const rows = doc.querySelectorAll('tr');
+    const parsedPlayers: Record<string, unknown>[] = [];
+
+    const parseCellNumber = (value: string | null | undefined): number => {
+      const cleaned = String(value ?? '').replace(/[^0-9.-]/g, '');
+      const parsed = parseFloat(cleaned);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    rows.forEach((row, index) => {
+      if (index === 0) return;
+
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 8) return;
+
+      parsedPlayers.push({
+        Name: cells[2]?.textContent?.trim() || 'Unknown Player',
+        Division: cells[3]?.textContent?.trim() || 'Unknown League',
+        Mins: parseCellNumber(cells[4]?.textContent?.trim()),
+        Age: parseCellNumber(cells[5]?.textContent?.trim()),
+        Position: cells[6]?.textContent?.trim() || 'ST (C)',
+        Wage: cells[7]?.textContent?.trim() || '£0',
+        'Gls/90': parseCellNumber(cells[8]?.textContent?.trim()),
+        xG: parseCellNumber(cells[9]?.textContent?.trim()),
+        'Shot %': parseCellNumber(cells[10]?.textContent?.trim()),
+        'Asts/90': parseCellNumber(cells[11]?.textContent?.trim()),
+        'Transfer Value': cells[12]?.textContent?.trim() || 'Unknown',
+      });
+    });
+
+    return parsedPlayers;
+  }, []);
+
   const buildPlayer = useCallback((row: Record<string, unknown>, index: number, idBase: number): Player => {
     const rawPos  = String(row.Position ?? row.Pos ?? '');
     const group   = getPositionGroup(rawPos);
@@ -332,34 +368,69 @@ export default function FMValueScoutV5() {
     };
   }, [balanced]);
 
-  const parseAndProcessCSV = useCallback((file: File) => {
+  const processPlayers = useCallback((rawData: Record<string, unknown>[], source: 'CSV' | 'HTML table') => {
+    const base = Date.now();
+    const parsed = rawData
+      .map((row, i) => buildPlayer(row, i, base))
+      .sort((a, b) => b.valueScore - a.valueScore)
+      .map((p, i) => ({ ...p, rank: i + 1 }));
+
+    setPlayers(parsed);
+    setUploadMsg({ type: 'success', text: `Loaded and scored ${parsed.length} players from ${source}` });
+    setIsProcessing(false);
+    setActiveTab('upload');
+  }, [buildPlayer]);
+
+  const parseAndProcessCSV = useCallback((content: string) => {
     setIsProcessing(true);
     setUploadMsg(null);
-    Papa.parse(file, {
+    Papa.parse(content, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const base = Date.now();
-        const parsed = (results.data as Record<string, unknown>[])
-          .map((row, i) => buildPlayer(row, i, base))
-          .sort((a, b) => b.valueScore - a.valueScore)
-          .map((p, i) => ({ ...p, rank: i + 1 }));
-        setPlayers(parsed);
-        setUploadMsg({ type: 'success', text: `Loaded ${parsed.length} players successfully` });
-        setIsProcessing(false);
-        setActiveTab('upload');
+        processPlayers(results.data as Record<string, unknown>[], 'CSV');
       },
       error: () => {
         setUploadMsg({ type: 'error', text: 'Failed to parse CSV – check the file format' });
         setIsProcessing(false);
       },
     });
-  }, [buildPlayer]);
+  }, [processPlayers]);
 
   const handleFile = useCallback((file: File) => {
-    if (file.name.toLowerCase().endsWith('.csv')) parseAndProcessCSV(file);
-    else setUploadMsg({ type: 'error', text: 'Please upload a .csv file' });
-  }, [parseAndProcessCSV]);
+    const fileName = file.name.toLowerCase();
+
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.html') && !fileName.endsWith('.htm')) {
+      setUploadMsg({ type: 'error', text: 'Please upload a .csv, .html, or .htm file' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = String(event.target?.result ?? '');
+      if (!content) {
+        setUploadMsg({ type: 'error', text: 'Failed to read file content' });
+        return;
+      }
+
+      if (fileName.endsWith('.csv')) {
+        parseAndProcessCSV(content);
+        return;
+      }
+
+      setIsProcessing(true);
+      setUploadMsg(null);
+      const rawData = parseFMHTMLTable(content);
+      processPlayers(rawData, 'HTML table');
+    };
+
+    reader.onerror = () => {
+      setUploadMsg({ type: 'error', text: 'Failed to read the uploaded file' });
+      setIsProcessing(false);
+    };
+
+    reader.readAsText(file);
+  }, [parseAndProcessCSV, parseFMHTMLTable, processPlayers]);
 
   // ── Filtering ───────────────────────────────────────────────────────────────
 
@@ -623,7 +694,7 @@ export default function FMValueScoutV5() {
                 <div style={{ fontSize: 13, color: '#71717a', marginBottom: 16 }}>
                   Use the BepInEx Player Export mod to generate a CSV from FM26
                 </div>
-                <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }}
+                <input ref={fileRef} type="file" accept=".csv,.html,.htm,text/html" style={{ display: 'none' }}
                   onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
                 {isProcessing && <div style={{ color: '#8b5cf6', fontSize: 13 }}>Processing…</div>}
                 {uploadMsg && (

@@ -5,7 +5,7 @@ import React, {
 } from 'react';
 import Papa from 'papaparse';
 import {
-  Upload, Download, X, BarChart3, Heart, FileText, Twitch, Twitter,
+  Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign,
   Users, HelpCircle, Trash2, Copy, ChevronUp, ChevronDown, Star,
   Shield, Eye, CheckCircle, ArrowRight, Grid, List, Search, Sliders,
   Zap, TrendingUp, TrendingDown, GitCompare, Bot, Send, RotateCcw,
@@ -1080,8 +1080,8 @@ export default function FMValueScoutV5() {
 
       <footer style={{borderTop:'0.5px solid rgba(139,92,246,0.12)',padding:'20px',textAlign:'center',fontSize:11,color:'#3f3f46',marginTop:32}}>
         <div style={{display:'flex',justifyContent:'center',gap:20,marginBottom:10}}>
-          <a href="https://twitter.com/JakeSummersFM" target="_blank" style={{color:'#52525b',textDecoration:'none',display:'flex',alignItems:'center',gap:4,fontSize:12}}><Twitter size={13} style={{color:'#38bdf8'}}/> @JakeSummersFM</a>
-          <a href="https://www.twitch.tv/jakesummersfm" target="_blank" style={{color:'#52525b',textDecoration:'none',display:'flex',alignItems:'center',gap:4,fontSize:12}}><Twitch size={13} style={{color:'#a78bfa'}}/> Twitch</a>
+          <a href="https://twitter.com/JakeSummersFM" target="_blank" style={{color:'#52525b',textDecoration:'none',display:'flex',alignItems:'center',gap:4,fontSize:12}}><AtSign size={13} style={{color:'#38bdf8'}}/> @JakeSummersFM</a>
+          <a href="https://www.twitch.tv/jakesummersfm" target="_blank" style={{color:'#52525b',textDecoration:'none',display:'flex',alignItems:'center',gap:4,fontSize:12}}><Tv size={13} style={{color:'#a78bfa'}}/> Twitch</a>
           <a href="https://ko-fi.com/jakesummersfm" target="_blank" style={{color:'#52525b',textDecoration:'none',display:'flex',alignItems:'center',gap:4,fontSize:12}}><Heart size={13} style={{color:'#f87171'}}/> Ko-fi</a>
         </div>
         FM Value Scout V5 Enhanced · Made for the FM community

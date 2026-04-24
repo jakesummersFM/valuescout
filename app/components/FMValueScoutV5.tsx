@@ -5,12 +5,13 @@ import React, {
 } from 'react';
 import Papa from 'papaparse';
 import {
-  Upload, Download, X, BarChart3, Heart, FileText, Tv, AtSign,
+  Upload, Download, X, BarChart3, BarChart2, Heart, FileText, Tv, AtSign,
   Users, HelpCircle, Trash2, Copy, ChevronUp, ChevronDown, Star,
   Shield, Eye, CheckCircle, ArrowRight, Grid, List, Search, Sliders,
   Zap, TrendingUp, TrendingDown, GitCompare, Bot, Send, RotateCcw,
   PlusCircle, Filter, Target, Keyboard
 } from 'lucide-react';
+import FMStatCentre from './FMStatCentre';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   SortingState, flexRender, ColumnDef
@@ -640,6 +641,8 @@ export default function FMValueScoutV5() {
   const [weights,        setWeights]        = useState<Weights>(DEFAULT_WEIGHTS);
   const [showWeights,    setShowWeights]    = useState(false);
   const [showAnalytics,  setShowAnalytics]  = useState(false);
+  const [showStatCentre,   setShowStatCentre]   = useState(false);
+  const [statCentrePlayer, setStatCentrePlayer] = useState<Player | null>(null);
   const [searchQuery,    setSearchQuery]    = useState('');
   const [minAge,         setMinAge]         = useState(15);
   const [maxAge,         setMaxAge]         = useState(40);
@@ -713,7 +716,7 @@ export default function FMValueScoutV5() {
     {accessorKey:'keyStat',header:'Key Stat',enableSorting:false},
     {accessorKey:'transferValue',header:'Value'},
     {accessorKey:'valueScore',header:'Score',cell:({row})=><ScorePill score={row.original.valueScore}/>,size:80},
-    {id:'actions',header:'',enableSorting:false,cell:({row})=>{ const p=row.original; const inList=!!shortlist.find(s=>s.id===p.id); return(<div style={{display:'flex',gap:5}}><button onClick={()=>setSelectedPlayer(p)} style={btnStyle}><Eye size={13}/></button><button onClick={()=>copyName(p)} style={btnStyle}><Copy size={13}/></button><button onClick={()=>inList?removeFromShortlist(p.id):addToShortlist(p)} style={{...btnStyle,background:inList?'rgba(124,58,237,0.15)':'transparent',color:inList?'#a78bfa':'#71717a'}}><Star size={13} fill={inList?'currentColor':'none'}/></button></div>); }},
+    {id:'actions',header:'',enableSorting:false,cell:({row})=>{ const p=row.original; const inList=!!shortlist.find(s=>s.id===p.id); return(<div style={{display:'flex',gap:5}}><button onClick={()=>setSelectedPlayer(p)} style={btnStyle}><Eye size={13}/></button><button onClick={()=>{ setStatCentrePlayer(p); setShowStatCentre(true); }} style={btnStyle} title="Deep stats"><BarChart2 size={13}/></button><button onClick={()=>copyName(p)} style={btnStyle}><Copy size={13}/></button><button onClick={()=>inList?removeFromShortlist(p.id):addToShortlist(p)} style={{...btnStyle,background:inList?'rgba(124,58,237,0.15)':'transparent',color:inList?'#a78bfa':'#71717a'}}><Star size={13} fill={inList?'currentColor':'none'}/></button></div>); }},
   ],[shortlist,copiedId]);
 
   const table=useReactTable({data:filtered,columns,state:{sorting},onSortingChange:setSorting,getCoreRowModel:getCoreRowModel(),getSortedRowModel:getSortedRowModel()});
@@ -748,6 +751,9 @@ export default function FMValueScoutV5() {
             <button onClick={()=>setShowWeights(!showWeights)} style={{ ...btnStyle, color:showWeights?'#a78bfa':'#71717a' }}><Sliders size={14}/></button>
             <button onClick={()=>setShowAnalytics(true)} disabled={!players.length} style={{ background:'rgba(16,185,129,0.15)', border:'0.5px solid rgba(16,185,129,0.3)', borderRadius:7, color:'#10b981', padding:'6px 12px', fontSize:12, cursor:players.length?'pointer':'not-allowed', opacity:players.length?1:0.4, display:'flex', alignItems:'center', gap:5, fontFamily:'inherit' }}>
               <BarChart3 size={13}/> Analytics
+            </button>
+            <button onClick={() => { setStatCentrePlayer(null); setShowStatCentre(true); }} disabled={!players.length} style={{ background:'rgba(59,130,246,0.15)', border:'0.5px solid rgba(59,130,246,0.3)', borderRadius:7, color:'#60a5fa', padding:'6px 12px', fontSize:12, cursor:players.length?'pointer':'not-allowed', opacity:players.length?1:0.4, display:'flex', alignItems:'center', gap:5, fontFamily:'inherit' }}>
+              <BarChart2 size={13}/> Stat Centre
             </button>
             <button onClick={exportCSV} disabled={!shortlist.length} style={{ background:'#7c3aed', border:'none', borderRadius:7, color:'white', padding:'6px 12px', fontSize:12, cursor:shortlist.length?'pointer':'not-allowed', opacity:shortlist.length?1:0.4, display:'flex', alignItems:'center', gap:5 }}><Download size={13}/> CSV ({shortlist.length})</button>
             <button onClick={exportPDF} disabled={!shortlist.length} style={{ background:'#059669', border:'none', borderRadius:7, color:'white', padding:'6px 12px', fontSize:12, cursor:shortlist.length?'pointer':'not-allowed', opacity:shortlist.length?1:0.4, display:'flex', alignItems:'center', gap:5 }}><FileText size={13}/> PDF</button>
@@ -1075,6 +1081,16 @@ export default function FMValueScoutV5() {
           onAddToShortlist={addToShortlist}
           onRemoveFromShortlist={removeFromShortlist}
           onClose={()=>setShowAnalytics(false)}
+        />
+      )}
+
+      {/* Stat Centre overlay */}
+      {showStatCentre&&(
+        <FMStatCentre
+          players={players}
+          shortlist={shortlist}
+          initialPlayer={statCentrePlayer ?? undefined}
+          onClose={()=>setShowStatCentre(false)}
         />
       )}
 

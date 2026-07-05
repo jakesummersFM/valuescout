@@ -8,7 +8,7 @@ import {
   Upload, Download, X, BarChart3, BarChart2, Heart, FileText, Tv, AtSign,
   Users, HelpCircle, Trash2, Copy, ChevronUp, ChevronDown, Star,
   Shield, Eye, CheckCircle, ArrowRight, Grid, List, Search, Sliders,
-  Zap, TrendingUp, TrendingDown, GitCompare, Bot, Send, RotateCcw,
+  Zap, TrendingUp, TrendingDown, GitCompare, RotateCcw,
   PlusCircle, Filter, Target, Keyboard
 } from 'lucide-react';
 import FMStatCentre from './FMStatCentre';
@@ -106,6 +106,8 @@ const POS_SHORT: Record<string, string> = {
   'GK':'GK','Central Defender':'CB','CDM':'CDM','Wing Back':'WB',
   'Centre Mid':'CM','Attacking Mid':'AM','Winger':'W','Striker':'ST',
 };
+
+const BTN_STYLE: React.CSSProperties = { background:'transparent', border:'0.5px solid rgba(139,92,246,0.2)', borderRadius:6, padding:'5px 8px', cursor:'pointer', color:'#71717a', display:'flex', alignItems:'center', gap:4, fontSize:12 };
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -334,7 +336,7 @@ function WageValueScatter({ players, posFilter, shortlistIds, onHover, onSelect,
   const valueTicks = [0,.25,.5,.75,1].map(t => ({ v:t*maxValue, y:PAD.t+innerH-t*innerH }));
   const svgPoint = (e: React.MouseEvent) => { const r = svgRef.current!.getBoundingClientRect(); return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; };
   const inRect   = (cx:number,cy:number) => { if(!lassoRect) return false; const {x1,y1,x2,y2}=lassoRect; return cx>=Math.min(x1,x2)&&cx<=Math.max(x1,x2)&&cy>=Math.min(y1,y2)&&cy<=Math.max(y1,y2); };
-  const lassoSelected = useMemo(() => lassoRect ? visible.filter(p => { const {cx,cy}=toSvg(p); return inRect(cx,cy); }) : [], [lassoRect,visible]);
+  const lassoSelected = lassoRect ? visible.filter(p => { const {cx,cy}=toSvg(p); return inRect(cx,cy); }) : [];
 
   return (
     <div style={{ position:'relative', userSelect:'none' }}>
@@ -455,6 +457,7 @@ function AnalyticsDashboard({ players, shortlist, onAddToShortlist, onRemoveFrom
   const [hoveredXY,    setHoveredXY]    = useState({x:0,y:0});
   const [selPlayer,    setSelPlayer]    = useState<Player|null>(null);
   const [showLegend,   setShowLegend]   = useState(true);
+  const [chartSize,    setChartSize]    = useState({ w: 800, h: 500 });
   const chartRef = useRef<HTMLDivElement>(null);
   const shortlistIds = useMemo(()=>new Set(shortlist.map(p=>p.id)),[shortlist]);
   const gems     = useMemo(()=>players.filter(p=>p.badge.type==='gem').length,[players]);
@@ -463,6 +466,15 @@ function AnalyticsDashboard({ players, shortlist, onAddToShortlist, onRemoveFrom
   const visCount = useMemo(()=>players.filter(p=>posFilter==='All'||p.position===posFilter).length,[players,posFilter]);
   const handleHover = useCallback((p:Player|null,x:number,y:number)=>{setHoveredPlayer(p);setHoveredXY({x,y});},[]);
   useEffect(()=>{ const h=(e:KeyboardEvent)=>{if(e.key==='Escape'){if(selPlayer)setSelPlayer(null);else onClose();}}; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[selPlayer,onClose]);
+  useEffect(() => {
+    const updateChartSize = () => {
+      if (!chartRef.current) return;
+      setChartSize({ w: chartRef.current.offsetWidth, h: chartRef.current.offsetHeight });
+    };
+    updateChartSize();
+    window.addEventListener('resize', updateChartSize);
+    return () => window.removeEventListener('resize', updateChartSize);
+  }, []);
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, background:'#06040f', display:'flex', flexDirection:'column', fontFamily:"'DM Mono','Fira Code','Consolas',monospace" }}>
@@ -505,7 +517,7 @@ function AnalyticsDashboard({ players, shortlist, onAddToShortlist, onRemoveFrom
               ? <WageValueScatter players={players} posFilter={posFilter} shortlistIds={shortlistIds} onHover={handleHover} onSelect={setSelPlayer} hoveredId={hoveredPlayer?.id??null} onAddToShortlist={onAddToShortlist}/>
               : <AgeBubbleChart   players={players} posFilter={posFilter} shortlistIds={shortlistIds} onHover={handleHover} onSelect={setSelPlayer} hoveredId={hoveredPlayer?.id??null}/>
             }
-            {hoveredPlayer&&<AnalyticsTooltip player={hoveredPlayer} x={hoveredXY.x} y={hoveredXY.y} chartW={chartRef.current?.offsetWidth??800} chartH={chartRef.current?.offsetHeight??500}/>}
+            {hoveredPlayer&&<AnalyticsTooltip player={hoveredPlayer} x={hoveredXY.x} y={hoveredXY.y} chartW={chartSize.w} chartH={chartSize.h}/>}
           </div>
           {activeChart==='scatter'&&<div style={{ position:'absolute', bottom:28, right:28, fontSize:11, color:'#3f3f46', display:'flex', alignItems:'center', gap:5 }}><Target size={12}/> Drag to lasso-select</div>}
         </div>
@@ -677,10 +689,12 @@ export default function FMValueScoutV5() {
   },[balanced,weights]);
 
   useEffect(()=>{
-    if(!players.length) return;
-    const base=Date.now();
-    const recalc=players.map((p,i)=>buildPlayer(p.rawData,i,base,balanced,weights)).sort((a,b)=>b.valueScore-a.valueScore).map((p,i)=>({...p,rank:i+1}));
-    setPlayers(addLeaguePercentiles(recalc));
+    setPlayers(prev => {
+      if(!prev.length) return prev;
+      const base=Date.now();
+      const recalc=prev.map((p,i)=>buildPlayer(p.rawData,i,base,balanced,weights)).sort((a,b)=>b.valueScore-a.valueScore).map((p,i)=>({...p,rank:i+1}));
+      return addLeaguePercentiles(recalc);
+    });
   },[balanced,weights]);
 
   const filtered = useMemo(()=>{
@@ -692,20 +706,18 @@ export default function FMValueScoutV5() {
     return out;
   },[players,posFilter,leagueFilter,searchQuery,minAge,maxAge,maxValue]);
 
-  const addToShortlist    = (p:Player)=>{ if(!shortlist.find(s=>s.id===p.id)) setShortlist(prev=>[...prev,p]); };
-  const removeFromShortlist=(id:number)=>setShortlist(prev=>prev.filter(p=>p.id!==id));
+  const addToShortlist    = useCallback((p:Player)=>{ if(!shortlist.find(s=>s.id===p.id)) setShortlist(prev=>[...prev,p]); },[shortlist]);
+  const removeFromShortlist=useCallback((id:number)=>setShortlist(prev=>prev.filter(p=>p.id!==id)),[]);
   const saveShortlist     = ()=>{ const name=prompt('Name this shortlist:'); if(!name) return; setSavedShortlists(prev=>[...prev,{id:Date.now().toString(),name,players:shortlist,createdAt:Date.now()}]); };
   const copyName          = (p:Player)=>{ navigator.clipboard.writeText(p.name); setCopiedId(p.id); setTimeout(()=>setCopiedId(null),1500); };
   const autoFillSquad     = ()=>{ const slots=FORMATION_SLOTS[formation]; const used=new Set<number>(); setSquad(slots.map(slot=>{ const c=shortlist.filter(p=>!used.has(p.id)&&p.position===slot.position).sort((a,b)=>b.valueScore-a.valueScore)[0]??null; if(c) used.add(c.id); return c; })); };
 
   const exportCSV=()=>{ if(!shortlist.length) return; const rows=['Player,Age,Position,League,Score,Value,Wage',...shortlist.map(p=>`${p.name},${p.age},${p.position},${p.league},${p.valueScore},${p.transferValue},${p.wage}`)].join('\n'); const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows); a.download='valuescout-shortlist.csv'; a.click(); };
   const exportPDF=()=>{ if(!shortlist.length) return; const doc=new jsPDF(); doc.text('FM Value Scout V5 — Shortlist',14,20); autoTable(doc,{startY:30,head:[['Player','Position','Age','League','Score','Value','Wage']],body:shortlist.map(p=>[p.name,p.position,p.age,p.league,p.valueScore,p.transferValue,p.wage]),theme:'grid',headStyles:{fillColor:[139,92,246]}}); doc.save('ValueScout_Shortlist.pdf'); };
-  const exportTransferReport=(player:Player)=>{ const doc=new jsPDF(); doc.setFontSize(20); doc.text('FM Value Scout — Transfer Report',14,22); doc.setFontSize(14); doc.text(player.name,14,34); doc.setFontSize(11); doc.setTextColor(100); doc.text(`${player.position} · ${player.league} · Age ${player.age}`,14,42); doc.setTextColor(0); doc.setFontSize(13); doc.text(`Value Score: ${player.valueScore}/97`,14,54); doc.text(`Transfer Value: ${player.transferValue}`,14,62); doc.text(`Weekly Wage: ${player.wage}`,14,70); doc.text(`Badge: ${player.badge.label||'None'}`,14,78); autoTable(doc,{startY:88,head:[['Metric','Score']],body:[['Performance',`${player.perfPercent}%`],['Value for money',`${player.valuePercent}%`],['Age factor',`${player.agePercent}%`],['League percentile',`${player.percentileInLeague??'N/A'}%`]],theme:'grid',headStyles:{fillColor:[124,58,237]}}); const recY=(doc as any).lastAutoTable.finalY+12; const verdict=player.valueScore>=85?'Strongly recommend signing.':player.valueScore>=75?'Good signing if budget allows.':player.valueScore>=65?'Potential option — negotiate price down.':'Not recommended at current price.'; doc.setTextColor(80); doc.text(`Recommendation: ${verdict}`,14,recY); doc.save(`${player.name.replace(/ /g,'_')}_Report.pdf`); };
+  const exportTransferReport=(player:Player)=>{ const doc=new jsPDF(); doc.setFontSize(20); doc.text('FM Value Scout — Transfer Report',14,22); doc.setFontSize(14); doc.text(player.name,14,34); doc.setFontSize(11); doc.setTextColor(100); doc.text(`${player.position} · ${player.league} · Age ${player.age}`,14,42); doc.setTextColor(0); doc.setFontSize(13); doc.text(`Value Score: ${player.valueScore}/97`,14,54); doc.text(`Transfer Value: ${player.transferValue}`,14,62); doc.text(`Weekly Wage: ${player.wage}`,14,70); doc.text(`Badge: ${player.badge.label||'None'}`,14,78); autoTable(doc,{startY:88,head:[['Metric','Score']],body:[['Performance',`${player.perfPercent}%`],['Value for money',`${player.valuePercent}%`],['Age factor',`${player.agePercent}%`],['League percentile',`${player.percentileInLeague??'N/A'}%`]],theme:'grid',headStyles:{fillColor:[124,58,237]}}); const docWithTable = doc as jsPDF & { lastAutoTable?: { finalY: number } }; const recY=(docWithTable.lastAutoTable?.finalY ?? 88)+12; const verdict=player.valueScore>=85?'Strongly recommend signing.':player.valueScore>=75?'Good signing if budget allows.':player.valueScore>=65?'Potential option — negotiate price down.':'Not recommended at current price.'; doc.setTextColor(80); doc.text(`Recommendation: ${verdict}`,14,recY); doc.save(`${player.name.replace(/ /g,'_')}_Report.pdf`); };
 
   const seasonComparison=useMemo(()=>{ if(!players.length||!seasonBPlayers.length) return []; return players.map(a=>{const b=seasonBPlayers.find(p=>p.name.toLowerCase()===a.name.toLowerCase());if(!b)return null;return{player:a,scoreA:a.valueScore,scoreB:b.valueScore,delta:b.valueScore-a.valueScore};}).filter(Boolean).sort((a,b)=>Math.abs(b!.delta)-Math.abs(a!.delta)) as {player:Player;scoreA:number;scoreB:number;delta:number}[]; },[players,seasonBPlayers]);
   const squadStats=useMemo(()=>{ const filled=squad.filter(Boolean) as Player[]; if(!filled.length) return{avgScore:0,avgAge:0,gems:0,totalWage:0}; return{avgScore:Math.round(filled.reduce((s,p)=>s+p.valueScore,0)/filled.length),avgAge:parseFloat((filled.reduce((s,p)=>s+p.age,0)/filled.length).toFixed(1)),gems:filled.filter(p=>p.badge.type==='gem').length,totalWage:Math.round(filled.reduce((s,p)=>s+p.wageK,0))}; },[squad]);
-
-  const btnStyle: React.CSSProperties = { background:'transparent', border:'0.5px solid rgba(139,92,246,0.2)', borderRadius:6, padding:'5px 8px', cursor:'pointer', color:'#71717a', display:'flex', alignItems:'center', gap:4, fontSize:12 };
 
   const columns=useMemo<ColumnDef<Player>[]>(()=>[
     {accessorKey:'rank',header:'#',size:48},
@@ -716,9 +728,10 @@ export default function FMValueScoutV5() {
     {accessorKey:'keyStat',header:'Key Stat',enableSorting:false},
     {accessorKey:'transferValue',header:'Value'},
     {accessorKey:'valueScore',header:'Score',cell:({row})=><ScorePill score={row.original.valueScore}/>,size:80},
-    {id:'actions',header:'',enableSorting:false,cell:({row})=>{ const p=row.original; const inList=!!shortlist.find(s=>s.id===p.id); return(<div style={{display:'flex',gap:5}}><button onClick={()=>setSelectedPlayer(p)} style={btnStyle}><Eye size={13}/></button><button onClick={()=>{ setStatCentrePlayer(p); setShowStatCentre(true); }} style={btnStyle} title="Deep stats"><BarChart2 size={13}/></button><button onClick={()=>copyName(p)} style={btnStyle}><Copy size={13}/></button><button onClick={()=>inList?removeFromShortlist(p.id):addToShortlist(p)} style={{...btnStyle,background:inList?'rgba(124,58,237,0.15)':'transparent',color:inList?'#a78bfa':'#71717a'}}><Star size={13} fill={inList?'currentColor':'none'}/></button></div>); }},
-  ],[shortlist,copiedId]);
+    {id:'actions',header:'',enableSorting:false,cell:({row})=>{ const p=row.original; const inList=!!shortlist.find(s=>s.id===p.id); return(<div style={{display:'flex',gap:5}}><button onClick={()=>setSelectedPlayer(p)} style={BTN_STYLE}><Eye size={13}/></button><button onClick={()=>{ setStatCentrePlayer(p); setShowStatCentre(true); }} style={BTN_STYLE} title="Deep stats"><BarChart2 size={13}/></button><button onClick={()=>copyName(p)} style={BTN_STYLE}><Copy size={13}/></button><button onClick={()=>inList?removeFromShortlist(p.id):addToShortlist(p)} style={{...BTN_STYLE,background:inList?'rgba(124,58,237,0.15)':'transparent',color:inList?'#a78bfa':'#71717a'}}><Star size={13} fill={inList?'currentColor':'none'}/></button></div>); }},
+  ],[shortlist,addToShortlist,removeFromShortlist]);
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table=useReactTable({data:filtered,columns,state:{sorting},onSortingChange:setSorting,getCoreRowModel:getCoreRowModel(),getSortedRowModel:getSortedRowModel()});
 
   const TAB_CONFIG: {id:Tab;label:string;icon?:React.ReactNode}[]=[
@@ -748,7 +761,7 @@ export default function FMValueScoutV5() {
             <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#71717a', cursor:'pointer' }}>
               <input type="checkbox" checked={balanced} onChange={e=>setBalanced(e.target.checked)} style={{ accentColor:'#7c3aed' }}/> Balanced
             </label>
-            <button onClick={()=>setShowWeights(!showWeights)} style={{ ...btnStyle, color:showWeights?'#a78bfa':'#71717a' }}><Sliders size={14}/></button>
+            <button onClick={()=>setShowWeights(!showWeights)} style={{ ...BTN_STYLE, color:showWeights?'#a78bfa':'#71717a' }}><Sliders size={14}/></button>
             <button onClick={()=>setShowAnalytics(true)} disabled={!players.length} style={{ background:'rgba(16,185,129,0.15)', border:'0.5px solid rgba(16,185,129,0.3)', borderRadius:7, color:'#10b981', padding:'6px 12px', fontSize:12, cursor:players.length?'pointer':'not-allowed', opacity:players.length?1:0.4, display:'flex', alignItems:'center', gap:5, fontFamily:'inherit' }}>
               <BarChart3 size={13}/> Analytics
             </button>
@@ -768,7 +781,7 @@ export default function FMValueScoutV5() {
                 <input type="range" min={5} max={80} value={weights[key]} onChange={e=>{ const v=parseInt(e.target.value); const rem=100-v; const others=(['performance','value','age'] as const).filter(k=>k!==key); setWeights({...weights,[key]:v,[others[0]]:Math.round(rem*0.6),[others[1]]:Math.round(rem*0.4)}); }} style={{ width:100, accentColor:'#7c3aed' }}/>
               </div>
             ))}
-            <button onClick={()=>setWeights(DEFAULT_WEIGHTS)} style={{ ...btnStyle, fontSize:11 }}><RotateCcw size={11}/> Reset</button>
+            <button onClick={()=>setWeights(DEFAULT_WEIGHTS)} style={{ ...BTN_STYLE, fontSize:11 }}><RotateCcw size={11}/> Reset</button>
           </div>
         )}
       </nav>
@@ -818,26 +831,26 @@ export default function FMValueScoutV5() {
               {players.length>0&&(
                 <>
                   <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
-                    <button onClick={()=>setShowFilters(!showFilters)} style={{...btnStyle,color:showFilters?'#a78bfa':'#71717a'}}><Filter size={13}/> Filters {showFilters?'▲':'▼'}</button>
+                    <button onClick={()=>setShowFilters(!showFilters)} style={{...BTN_STYLE,color:showFilters?'#a78bfa':'#71717a'}}><Filter size={13}/> Filters {showFilters?'▲':'▼'}</button>
                     <select value={leagueFilter} onChange={e=>setLeagueFilter(e.target.value)} style={{ background:'rgba(20,14,38,0.8)', border:'0.5px solid rgba(139,92,246,0.2)', borderRadius:7, color:'#a1a1aa', fontSize:12, padding:'5px 10px', cursor:'pointer' }}>
                       {allLeagues.map(l=><option key={l} value={l}>{l}</option>)}
                     </select>
                     <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-                      {(['table','cards'] as const).map(m=><button key={m} onClick={()=>setViewMode(m)} style={{...btnStyle,color:viewMode===m?'#a78bfa':'#52525b',background:viewMode===m?'rgba(124,58,237,0.1)':'transparent'}}>{m==='table'?<List size={13}/>:<Grid size={13}/>}</button>)}
+                      {(['table','cards'] as const).map(m=><button key={m} onClick={()=>setViewMode(m)} style={{...BTN_STYLE,color:viewMode===m?'#a78bfa':'#52525b',background:viewMode===m?'rgba(124,58,237,0.1)':'transparent'}}>{m==='table'?<List size={13}/>:<Grid size={13}/>}</button>)}
                     </div>
                   </div>
                   {showFilters&&(
                     <div style={{ background:'rgba(20,14,38,0.8)', border:'0.5px solid rgba(139,92,246,0.2)', borderRadius:12, padding:'16px 20px', marginBottom:16, display:'flex', gap:24, flexWrap:'wrap', alignItems:'center' }}>
                       <div><div style={{fontSize:11,color:'#71717a',marginBottom:4}}>Age: {minAge}–{maxAge}</div><div style={{display:'flex',gap:8}}><input type="range" min={15} max={40} value={minAge} onChange={e=>setMinAge(+e.target.value)} style={{width:80,accentColor:'#7c3aed'}}/><input type="range" min={15} max={40} value={maxAge} onChange={e=>setMaxAge(+e.target.value)} style={{width:80,accentColor:'#7c3aed'}}/></div></div>
                       <div><div style={{fontSize:11,color:'#71717a',marginBottom:4}}>Max value: £{maxValue}m</div><input type="range" min={0} max={200} value={maxValue} onChange={e=>setMaxValue(+e.target.value)} style={{width:120,accentColor:'#7c3aed'}}/></div>
-                      <button onClick={()=>{setMinAge(15);setMaxAge(40);setMaxValue(200);setLeagueFilter('All');setSearchQuery('');}} style={{...btnStyle,fontSize:11}}><RotateCcw size={11}/> Clear</button>
+                      <button onClick={()=>{setMinAge(15);setMaxAge(40);setMaxValue(200);setLeagueFilter('All');setSearchQuery('');}} style={{...BTN_STYLE,fontSize:11}}><RotateCcw size={11}/> Clear</button>
                     </div>
                   )}
                   <div style={{ fontSize:12, color:'#52525b', marginBottom:10 }}>Showing <strong style={{color:'#a1a1aa'}}>{filtered.length}</strong> of {players.length} players</div>
                   {viewMode==='table'?(
                     <div style={{ background:'rgba(20,14,38,0.9)', border:'0.5px solid rgba(139,92,246,0.2)', borderRadius:14, overflow:'hidden' }}>
                       <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                        <thead>{table.getHeaderGroups().map(hg=><tr key={hg.id} style={{borderBottom:'0.5px solid rgba(139,92,246,0.15)',background:'rgba(10,7,20,0.6)'}}>{hg.headers.map(h=><th key={h.id} onClick={h.column.getCanSort()?h.column.getToggleSortingHandler():undefined} style={{padding:'10px 14px',textAlign:'left',fontSize:10,fontWeight:600,color:'#7c3aed',cursor:h.column.getCanSort()?'pointer':'default',userSelect:'none',letterSpacing:'0.07em',textTransform:'uppercase'}}><div style={{display:'flex',alignItems:'center',gap:3}}>{flexRender(h.column.columnDef.header,h.getContext())}{h.column.getIsSorted()==='asc'&&<ChevronUp size={11}/>}{h.column.getIsSorted()==='desc'&&<ChevronDown size={11}/>}</div></th>)}</tr>)}</thead>
+                        <thead>{table.getHeaderGroups().map(hg=><tr key={hg.id} style={{borderBottom:'0.5px solid rgba(139,92,246,0.15)',background:'rgba(10,7,20,0.6)'}}>{hg.headers.map(h=><th key={h.id} onClick={h.column.getCanSort()?h.column.getToggleSortingHandler():undefined} style={{padding:'10px 14px',textAlign:'left',fontSize:10,fontWeight:600,color:'#7c3aed',cursor:h.column.getCanSort()?'pointer':'default',userSelect:'none',letterSpacing:'0.07em',textTransform:'uppercase'}}><div style={{display:'flex',alignItems:'center',gap:3}}>{flexRender(h.column.columnDef.header,h.getContext())}{h.column.getIsSorted()==='asc'?<ChevronUp size={11}/>:h.column.getIsSorted()==='desc'?<ChevronDown size={11}/>:null}</div></th>)}</tr>)}</thead>
                         <tbody>{table.getRowModel().rows.map(row=><tr key={row.id} style={{borderBottom:'0.5px solid rgba(139,92,246,0.08)',transition:'background 0.1s',cursor:'pointer'}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(124,58,237,0.05)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')} onDoubleClick={()=>setSelectedPlayer(row.original)}>{row.getVisibleCells().map(cell=><td key={cell.id} style={{padding:'10px 14px',fontSize:13,verticalAlign:'middle'}}>{flexRender(cell.column.columnDef.cell,cell.getContext())}</td>)}</tr>)}</tbody>
                       </table>
                     </div>
@@ -860,7 +873,7 @@ export default function FMValueScoutV5() {
                     {([compareA,compareB] as const).map((sel,idx)=>(
                       <div key={idx}>
                         <div style={{fontSize:11,color:'#8b5cf6',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em',fontWeight:600}}>Player {idx+1}</div>
-                        <select value={sel?.id??''} onChange={e=>{const p=players.find(pl=>pl.id===parseInt(e.target.value))??null;idx===0?setCompareA(p):setCompareB(p);}} style={{width:'100%',padding:'8px 12px',background:'rgba(20,14,38,0.9)',border:'0.5px solid rgba(139,92,246,0.3)',borderRadius:8,color:'#e4e4e7',fontSize:13}}>
+                        <select value={sel?.id??''} onChange={e=>{const p=players.find(pl=>pl.id===parseInt(e.target.value))??null;if(idx===0){setCompareA(p);}else{setCompareB(p);}}} style={{width:'100%',padding:'8px 12px',background:'rgba(20,14,38,0.9)',border:'0.5px solid rgba(139,92,246,0.3)',borderRadius:8,color:'#e4e4e7',fontSize:13}}>
                           <option value="">Select a player…</option>
                           {players.map(p=><option key={p.id} value={p.id}>{p.name} ({p.position}, {p.age}y)</option>)}
                         </select>
@@ -900,7 +913,7 @@ export default function FMValueScoutV5() {
                 <div style={{fontSize:12,color:'#71717a'}}>Formation:</div>
                 {Object.keys(FORMATION_SLOTS).map(f=><button key={f} onClick={()=>{setFormation(f);setSquad(Array(FORMATION_SLOTS[f].length).fill(null));}} style={{padding:'5px 14px',borderRadius:7,fontSize:12,cursor:'pointer',background:formation===f?'#7c3aed':'transparent',color:formation===f?'white':'#71717a',border:`0.5px solid ${formation===f?'#7c3aed':'rgba(139,92,246,0.2)'}`}}>{f}</button>)}
                 <button onClick={autoFillSquad} disabled={!shortlist.length} style={{padding:'5px 14px',borderRadius:7,fontSize:12,cursor:shortlist.length?'pointer':'not-allowed',background:'rgba(16,185,129,0.15)',color:'#10b981',border:'0.5px solid rgba(16,185,129,0.3)',opacity:shortlist.length?1:0.4,display:'flex',alignItems:'center',gap:5}}><Zap size={12}/> Auto-fill</button>
-                <button onClick={()=>setSquad(Array(FORMATION_SLOTS[formation].length).fill(null))} style={{...btnStyle,marginLeft:'auto',color:'#f87171',fontSize:11}}><Trash2 size={11}/> Clear</button>
+                <button onClick={()=>setSquad(Array(FORMATION_SLOTS[formation].length).fill(null))} style={{...BTN_STYLE,marginLeft:'auto',color:'#f87171',fontSize:11}}><Trash2 size={11}/> Clear</button>
               </div>
               {squad.some(Boolean)&&(
                 <div style={{display:'flex',gap:10,marginBottom:16}}>
@@ -948,7 +961,7 @@ export default function FMValueScoutV5() {
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
                         <ScorePill score={scoreA}/><ArrowRight size={12} style={{color:'#52525b'}}/><ScorePill score={scoreB}/>
                         <div style={{minWidth:48,textAlign:'center',fontSize:13,fontWeight:700,color:delta>0?'#10b981':delta<0?'#ef4444':'#71717a',background:delta>0?'rgba(16,185,129,0.1)':delta<0?'rgba(239,68,68,0.1)':'rgba(255,255,255,0.04)',padding:'2px 8px',borderRadius:99}}>{delta>0?`+${delta}`:delta}</div>
-                        {delta>5&&<TrendingUp size={14} style={{color:'#10b981'}}/>}{delta<-5&&<TrendingDown size={14} style={{color:'#ef4444'}}/>}
+                        {delta>5?<TrendingUp size={14} style={{color:'#10b981'}}/>:delta<-5?<TrendingDown size={14} style={{color:'#ef4444'}}/>:null}
                       </div>
                     </div>
                   ))}
@@ -1008,8 +1021,8 @@ export default function FMValueScoutV5() {
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:600,color:'#7c3aed',textTransform:'uppercase',letterSpacing:'0.1em'}}>Shortlist ({shortlist.length})</div>
                 <div style={{display:'flex',gap:5}}>
-                  <button onClick={saveShortlist} title="Save" style={{...btnStyle,fontSize:10,padding:'3px 7px'}}><PlusCircle size={11}/></button>
-                  <button onClick={()=>setShortlist([])} style={{...btnStyle,color:'#f87171',fontSize:10,padding:'3px 7px'}}><Trash2 size={11}/></button>
+                  <button onClick={saveShortlist} title="Save" style={{...BTN_STYLE,fontSize:10,padding:'3px 7px'}}><PlusCircle size={11}/></button>
+                  <button onClick={()=>setShortlist([])} style={{...BTN_STYLE,color:'#f87171',fontSize:10,padding:'3px 7px'}}><Trash2 size={11}/></button>
                 </div>
               </div>
               {shortlist.map(p=>(

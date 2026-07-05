@@ -109,7 +109,6 @@ export const PlayerCard = memo(function PlayerCard({
 // Extracted to avoid re-rendering the entire column defs on every copy click
 
 interface RowActionsProps {
-  player: Player;
   inShortlist: boolean;
   copied: boolean;
   onView: () => void;
@@ -130,7 +129,7 @@ const btnBase: React.CSSProperties = {
   gap: 4,
 };
 
-export const RowActions = memo(function RowActions({ player, inShortlist, copied, onView, onCopy, onShortlist }: RowActionsProps) {
+export const RowActions = memo(function RowActions({ inShortlist, copied, onView, onCopy, onShortlist }: RowActionsProps) {
   return (
     <div style={{ display: 'flex', gap: 6 }}>
       <button onClick={onView} style={btnBase}>👁 View</button>

@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight, Users, User, TrendingUp, Award, AlertTriangle, Star, BarChart2, Activity, Target } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Users, User, TrendingUp, Award, AlertTriangle, Star, Activity, Target } from 'lucide-react';
 
 // ─── Types (mirrors main app) ─────────────────────────────────────────────────
 
@@ -343,8 +343,8 @@ function ScoutingVerdict({ player }: { player: Player }) {
 
 // ─── Player Deep-Dive ─────────────────────────────────────────────────────────
 
-function PlayerMode({ player, allPlayers, onSelectPlayer, shortlist }: {
-  player: Player; allPlayers: Player[]; onSelectPlayer: (p: Player) => void; shortlist: Player[];
+function PlayerMode({ player, allPlayers }: {
+  player: Player; allPlayers: Player[];
 }) {
   const stats     = getStatDefs(player.position);
   const samePos   = allPlayers.filter(p => p.position === player.position && p.id !== player.id);
@@ -494,8 +494,8 @@ function PlayerMode({ player, allPlayers, onSelectPlayer, shortlist }: {
 
 // ─── Squad Overview ───────────────────────────────────────────────────────────
 
-function SquadMode({ shortlist, allPlayers, onSelectPlayer }: {
-  shortlist: Player[]; allPlayers: Player[]; onSelectPlayer: (p: Player) => void;
+function SquadMode({ shortlist, onSelectPlayer }: {
+  shortlist: Player[]; onSelectPlayer: (p: Player) => void;
 }) {
   const [posFilter, setPosFilter] = useState('All');
   const [sortStat,  setSortStat]  = useState('valueScore');
@@ -731,8 +731,6 @@ export default function FMStatCentre({ players, shortlist, initialPlayer, onClos
             <PlayerMode
               player={player}
               allPlayers={players}
-              shortlist={shortlist}
-              onSelectPlayer={setPlayer}
             />
           ) : (
             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', flexDirection:'column', gap:12, color:'#52525b' }}>
@@ -742,7 +740,7 @@ export default function FMStatCentre({ players, shortlist, initialPlayer, onClos
             </div>
           )
         ) : (
-          <SquadMode shortlist={shortlist} allPlayers={players} onSelectPlayer={p => { setPlayer(p); setMode('player'); }} />
+          <SquadMode shortlist={shortlist} onSelectPlayer={p => { setPlayer(p); setMode('player'); }} />
         )}
       </div>
 

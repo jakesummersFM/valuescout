@@ -547,17 +547,41 @@ export default function FMValueScoutV6() {
   const parseAndProcessCSV = useCallback((file: File) => {
     setIsProcessing(true);
     setUploadMsg(null);
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      delimiter: ';',
+      transformHeader: (header) => {
+        const map: Record<string, string> = {
+          Player: 'Name',
+          Division: 'League',
+          Salary: 'Wage',
+          'Sv %': 'Sv %',
+          'Cln/90': 'Clean Sheets',
+        };
+        return map[header] || header;
+      },
+      transform: (value: string) => {
+        if (!value) return value;
+        return value.replace(/(\d+),(\d+)/g, '$1.$2');
+      },
       complete: (results) => {
         try {
           const base = Date.now();
-          const rows = results.data as ParsedCSVRow[];
-          const validRows = rows.filter(row => row && Object.keys(row).length > 0 && row.Name);
-          
+          let rows = results.data as ParsedCSVRow[];
+
+          const validRows = rows.filter(row =>
+            row &&
+            Object.keys(row).length > 3 &&
+            (row.Name || row.Player)
+          );
+
           if (validRows.length === 0) {
-            setUploadMsg({ type: 'error', text: 'No valid player data found. Check CSV format.' });
+            setUploadMsg({
+              type: 'error',
+              text: 'No valid player data found. Make sure you exported using the BepInEx Player Export mod.'
+            });
             setIsProcessing(false);
             return;
           }
@@ -566,11 +590,15 @@ export default function FMValueScoutV6() {
             .map((row, i) => buildPlayer(row, i, base))
             .sort((a, b) => b.valueScore - a.valueScore)
             .map((p, i) => ({ ...p, rank: i + 1 }));
-          
+
           setPlayers(parsed);
-          setUploadMsg({ type: 'success', text: `✓ Loaded ${parsed.length} players | Scoring: V6 P/90 Moneyball` });
-          setActiveTab('upload');
+          setUploadMsg({
+            type: 'success',
+            text: `✓ Loaded ${parsed.length} players | Scoring: V6 P/90 Moneyball`
+          });
+          setActiveTab('data-hub');
         } catch (e) {
+          console.error(e);
           setUploadMsg({ type: 'error', text: `Parse error: ${e instanceof Error ? e.message : 'Unknown error'}` });
         }
         setIsProcessing(false);

@@ -39,7 +39,7 @@ export const FiltersTab = memo(function FiltersTab() {
         background: 'rgba(5,150,105,0.1)', border: '0.5px solid rgba(5,150,105,0.3)',
         borderRadius: 10, fontSize: 13, color: '#6ee7b7', maxWidth: 560,
       }}>
-        <strong>Tip:</strong> Always include Name, Age, Position, Transfer Value, Wage, League and Minutes as a minimum.
+        <strong>Tip:</strong> Always include Player, Age, Nation, Club, Position, Rating, Transfer Value, Wage, Expires and Minutes as a minimum.
         Everything else improves accuracy for specific positions.
       </div>
     </div>

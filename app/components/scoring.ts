@@ -14,15 +14,19 @@ export const POSITION_FILTERS = [
   { label: 'ST',        value: 'Striker' },
 ];
 
+const BASE_COLUMNS = [
+  'Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes',
+];
+
 export const RECOMMENDED_COLUMNS: Record<string, string[]> = {
-  'Central Defender': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tck C', 'Itc'],
-  'CDM':              ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tck C', 'Itc', 'Key', 'Pas %'],
-  'Wing Back':        ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tck C', 'Itc', 'Key', 'Ast'],
-  'Centre Mid':       ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Tck C', 'Key', 'Ast'],
-  'Attacking Mid':    ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Gls', 'Ast', 'Key', 'Shots', 'xG'],
-  'Winger':           ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Gls', 'Ast', 'Key', 'Shots', 'xG'],
-  'Striker':          ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Gls', 'Ast', 'Shots', 'xG'],
-  'GK':               ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Sv %', 'Clean Sheets'],
+  'GK': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'xGP', 'xGP/90', 'xSv %', 'Clean Sheets', 'Cln/90', 'Sv %', 'Saves/90', 'Pens Saved', 'Pas %'],
+  'CB': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'Hdr %', 'Aer A/90', 'Tck R', 'K Tck/90', 'Int/90', 'Blk/90', 'Clr/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90'],
+  'RBLB': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Clr/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90'],
+  'DM': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'Fouls Made', 'KP/90', 'xA/90'],
+  'CM': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'Tck R', 'Int/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'KP/90', 'xA/90', 'Drb/90', 'CCC', 'Goals per 90 minutes'],
+  'CAM': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'xA/90', 'KP/90', 'OP-KP/90', 'CCC', 'Ch C/90', 'Pas %', 'Pr passes/90', 'Drb/90', 'Goals per 90 minutes', 'Shots From Outside The Box Per 90 minutes', 'Dist/90'],
+  'LWRW': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90', 'CCC', 'Goals per 90 minutes', 'Pas %', 'Dist/90', 'Tck R', 'Int/90'],
+  'ST': ['Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes', 'Goals per 90 minutes', 'xG', 'Goals', 'Shots', 'Shot %', 'xG/shot', 'NP-xG/90', 'NP-xG', 'xG/90', 'Shot/90', 'Mins/'],
 };
 
 export const FORMATION_SLOTS: Record<string, { label: string; position: string }[][]> = {

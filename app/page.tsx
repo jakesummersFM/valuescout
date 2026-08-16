@@ -193,15 +193,20 @@ const FORMATION_SLOTS: Record<string, { label: string; position: string }[]> = {
   ],
 };
 
+const BASE_COLUMNS = [
+  'Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes',
+];
+
 // Position-specific column checklist shown in the Setup Guide tab
 const SETUP_COLUMNS: Record<string, string[]> = {
-  'Goalkeepers': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Save %', 'Clean Sheets'],
-  'Centre Backs': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Tackles', 'Interceptions', 'Pass %'],
-  'Fullbacks / Wing Backs': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Tackles', 'Interceptions', 'Assists', 'Key Passes', 'Pass %'],
-  'Defensive Mid (CDM)': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Tackles', 'Interceptions', 'Key Passes', 'Pass %'],
-  'Centre Mid': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Key Passes', 'Assists', 'Tackles', 'Pass %'],
-  'Attacking Mid / Winger': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Goals', 'Assists', 'Key Passes', 'Shots', 'xG', 'xA'],
-  'Striker': ['Name', 'Position', 'Age', 'Transfer Value', 'Wage', 'League', 'Minutes', 'Apps', 'Goals', 'Assists', 'Shots', 'xG', 'xA'],
+  'GK': [...BASE_COLUMNS, 'xGP', 'xGP/90', 'xSv %', 'Clean Sheets', 'Cln/90', 'Sv %', 'Saves/90', 'Pens Saved', 'Pas %'],
+  'CB': [...BASE_COLUMNS, 'Hdr %', 'Aer A/90', 'Tck R', 'K Tck/90', 'Int/90', 'Blk/90', 'Clr/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90'],
+  'RBLB': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Clr/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90'],
+  'DM': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'Fouls Made', 'KP/90', 'xA/90'],
+  'CM': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'KP/90', 'xA/90', 'Drb/90', 'CCC', 'Goals per 90 minutes'],
+  'CAM': [...BASE_COLUMNS, 'xA/90', 'KP/90', 'OP-KP/90', 'CCC', 'Ch C/90', 'Pas %', 'Pr passes/90', 'Drb/90', 'Goals per 90 minutes', 'Shots From Outside The Box Per 90 minutes', 'Dist/90'],
+  'LWRW': [...BASE_COLUMNS, 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90', 'CCC', 'Goals per 90 minutes', 'Pas %', 'Dist/90', 'Tck R', 'Int/90'],
+  'ST': [...BASE_COLUMNS, 'Goals per 90 minutes', 'xG', 'Goals', 'Shots', 'Shot %', 'xG/shot', 'NP-xG/90', 'NP-xG', 'xG/90', 'Shot/90', 'Mins/'],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1593,6 +1598,61 @@ export default function FMValueScoutV7() {
                   straight into the Upload tab. This app auto-detects whatever format the tool gives you
                   {'(semicolons or commas, currency ranges, "Unknown" values — all handled automatically).'}
                 </p>
+              </div>
+
+              <div style={{
+                marginBottom: 20,
+                padding: '16px 18px',
+                borderRadius: 12,
+                background: 'rgba(16,185,129,0.08)',
+                border: '0.5px solid rgba(16,185,129,0.25)',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#86efac', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Filter pack credit
+                </div>
+                <div style={{ fontSize: 13, color: '#d4d4d8', lineHeight: 1.7 }}>
+                  These filters are based on the master template pack created by{' '}
+                  <a href="https://youtube.com/@ssorloser?si=1TVyG9tvZ6pb60l2" target="_blank" rel="noreferrer" style={{ color: '#c4b5fd', textDecoration: 'underline' }}>
+                    SSorLoser
+                  </a>
+                  .
+                  <br />
+                  Video: {' '}
+                  <a href="https://youtu.be/_7DAD2jvM-4?si=dICQJLCaWHbn3yrb" target="_blank" rel="noreferrer" style={{ color: '#c4b5fd', textDecoration: 'underline' }}>
+                    SSorLoser FM filter guide
+                  </a>
+                </div>
+              </div>
+
+              <div style={{
+                marginBottom: 18,
+                padding: '16px 18px',
+                borderRadius: 12,
+                background: 'rgba(124,58,237,0.06)',
+                border: '0.5px solid rgba(139,92,246,0.2)',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#c4b5fd', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  New filter templates
+                </div>
+                <div style={{ fontSize: 12, color: '#d4d4d8', lineHeight: 1.9 }}>
+                  <strong>Base columns:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes
+                  <br />
+                  <strong>GK:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · xGP | xGP/90 | xSv % | Clean Sheets | Cln/90 | Sv % | Saves/90 | Pens Saved | Pas %
+                  <br />
+                  <strong>CB:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · Hdr % | Aer A/90 | Tck R | K Tck/90 | Int/90 | Blk/90 | Clr/90 | Poss Won/90 | Pas % | Pr passes/90 | Dist/90
+                  <br />
+                  <strong>RBLB:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · Tck R | Int/90 | Poss Won/90 | Blk/90 | Clr/90 | Pas % | Pr passes/90 | Dist/90 | xA/90 | KP/90 | Cr C/A | Cr C/90 | Drb/90
+                  <br />
+                  <strong>DM:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · Tck R | Int/90 | Poss Won/90 | Blk/90 | Pas % | Pr passes/90 | Dist/90 | Fouls Made | KP/90 | xA/90
+                  <br />
+                  <strong>CM:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · Tck R | Int/90 | Poss Won/90 | Pas % | Pr passes/90 | Dist/90 | KP/90 | xA/90 | Drb/90 | CCC | Goals per 90 minutes
+                  <br />
+                  <strong>CAM:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · xA/90 | KP/90 | OP-KP/90 | CCC | Ch C/90 | Pas % | Pr passes/90 | Drb/90 | Goals per 90 minutes | Shots From Outside The Box Per 90 minutes | Dist/90
+                  <br />
+                  <strong>LWRW:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · xA/90 | KP/90 | Cr C/A | Cr C/90 | Drb/90 | CCC | Goals per 90 minutes | Pas % | Dist/90 | Tck R | Int/90
+                  <br />
+                  <strong>ST:</strong> Player | Age | Nation | Club | Position | Rating | Transfer Value | Wage | Expires | Minutes · Goals per 90 minutes | xG | Goals | Shots | Shot % | xG/shot | NP-xG/90 | NP-xG | xG/90 | Shot/90 | Mins/
+                </div>
               </div>
 
               <div style={{ fontSize: 13, fontWeight: 700, color: '#8b5cf6', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>

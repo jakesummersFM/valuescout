@@ -14,7 +14,6 @@ import {
 } from '@tanstack/react-table';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { MONEYBALL_TEMPLATES } from './components/moneyballTemplates';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -53,6 +52,12 @@ interface P90StatsType {
   passCompletion: number;
   savePct: number;
   cleanSheetsP90: number;
+  aerialsP90: number;
+  clearancesP90: number;
+  blocksP90: number;
+  progressivePassesP90: number;
+  dribblesP90: number;
+  crossesP90: number;
   minutesPlayed: number;
   appearances: number;
   costPerGoal: number;
@@ -77,7 +82,13 @@ type StatMetricKey =
   | 'goalsP90'
   | 'assistsP90'
   | 'xGP90'
-  | 'shotP90';
+  | 'shotP90'
+  | 'aerialsP90'
+  | 'clearancesP90'
+  | 'blocksP90'
+  | 'progressivePassesP90'
+  | 'dribblesP90'
+  | 'crossesP90';
 
 interface StatMetric {
   key: StatMetricKey;
@@ -194,8 +205,21 @@ const FORMATION_SLOTS: Record<string, { label: string; position: string }[]> = {
   ],
 };
 
+const BASE_COLUMNS = [
+  'Player', 'Age', 'Nation', 'Club', 'Position', 'Rating', 'Transfer Value', 'Wage', 'Expires', 'Minutes',
+];
+
 // Position-specific column checklist shown in the Setup Guide tab
-const SETUP_COLUMNS = MONEYBALL_TEMPLATES;
+const SETUP_COLUMNS: Record<string, string[]> = {
+  'GK': [...BASE_COLUMNS, 'xGP', 'xGP/90', 'xSv %', 'Clean Sheets', 'Cln/90', 'Sv %', 'Saves/90', 'Pens Saved', 'Pas %'],
+  'CB': [...BASE_COLUMNS, 'Hdr %', 'Aer A/90', 'Tck R', 'K Tck/90', 'Int/90', 'Blk/90', 'Clr/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90'],
+  'RBLB': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Clr/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90'],
+  'DM': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Blk/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'Fouls Made', 'KP/90', 'xA/90'],
+  'CM': [...BASE_COLUMNS, 'Tck R', 'Int/90', 'Poss Won/90', 'Pas %', 'Pr passes/90', 'Dist/90', 'KP/90', 'xA/90', 'Drb/90', 'CCC', 'Goals per 90 minutes'],
+  'CAM': [...BASE_COLUMNS, 'xA/90', 'KP/90', 'OP-KP/90', 'CCC', 'Ch C/90', 'Pas %', 'Pr passes/90', 'Drb/90', 'Goals per 90 minutes', 'Shots From Outside The Box Per 90 minutes', 'Dist/90'],
+  'LWRW': [...BASE_COLUMNS, 'xA/90', 'KP/90', 'Cr C/A', 'Cr C/90', 'Drb/90', 'CCC', 'Goals per 90 minutes', 'Pas %', 'Dist/90', 'Tck R', 'Int/90'],
+  'ST': [...BASE_COLUMNS, 'Goals per 90 minutes', 'xG', 'Goals', 'Shots', 'Shot %', 'xG/shot', 'NP-xG/90', 'NP-xG', 'xG/90', 'Shot/90', 'Mins/'],
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROBUST PARSING — handles the real-world export tool's format
@@ -315,8 +339,16 @@ function pickFirstRaw(row: CsvRow, keys: string[]): unknown {
 function getPositionGroup(pos: unknown): PlayerPosition {
   const p = `${pos ?? ''}`.toLowerCase().trim();
   if (p.includes('gk') || p === 'goalkeeper') return 'GK';
-  if (p.includes('wing back') || p.includes('wb') || p.includes('fullback') || p.includes('d (r') || p.includes('d (l')) return 'Wing Back';
-  if (p.includes('d (c)') || p.includes('cb') || p.includes('centre def') || p.includes('center def')) return 'Central Defender';
+  // Pure wing-backs / full-backs (explicit WB label)
+  if (p.includes('wb') || p.includes('wing back') || p.includes('fullback') || p.includes('full back')) return 'Wing Back';
+  // Centre-backs including hybrids like D (RC), D (LC), D (RLC) — must check BEFORE side-only
+  if (
+    p.includes('d (c)') || p.includes('d (rc)') || p.includes('d (lc)') ||
+    p.includes('d (rlc)') || p.includes('d (lrc)') || p.includes('cb') ||
+    p.includes('centre def') || p.includes('center def') || p.includes('d/c')
+  ) return 'Central Defender';
+  // Side-only defenders without a centre role
+  if (p.includes('d (r') || p.includes('d (l') || p.includes('d/r') || p.includes('d/l')) return 'Wing Back';
   if (p.includes('dm') || p.includes('d m')) return 'CDM';
   if (p.includes('am') || p.includes('attacking mid') || p.includes('a m')) return 'Attacking Mid';
   if (p.includes('cm') || p.includes('c m') || p.includes('centre mid')) return 'Centre Mid';
@@ -334,20 +366,29 @@ function getLeagueMultiplier(league: unknown): number {
 }
 
 function calculateP90Stats(row: CsvRow, position: PlayerPosition, transferValueM: number, wageK: number): P90StatsType {
-  const minutes = Math.max(1, parseNum(row, ['Minutes', 'Mins', 'Min'], 90));
+  const minutes = Math.max(1, parseNum(row, ['Minutes', 'Mins', 'Min', 'Mins/'], 90));
   const apps = Math.max(1, parseNum(row, ['Apps', 'Appearances'], 1));
 
-  const goalsP90 = readStatSmart(row, ['Goals', 'Gls'], ['Goals/90', 'Gls/90'], minutes);
+  const goalsP90 = readStatSmart(row, ['Goals', 'Gls'], ['Goals/90', 'Gls/90', 'Goals per 90 minutes'], minutes);
   const assistsP90 = readStatSmart(row, ['Assists', 'Ast'], ['Assists/90', 'Ast/90'], minutes);
-  const xGP90 = readStatSmart(row, ['xG'], ['xG/90'], minutes);
+  const xGP90 = readStatSmart(row, ['xG', 'NP-xG'], ['xG/90', 'NP-xG/90'], minutes);
   const xAP90 = readStatSmart(row, ['xA'], ['xA/90'], minutes);
-  const keyPassesP90 = readStatSmart(row, ['Key Passes', 'KP', 'Key'], ['Key Passes/90', 'KP/90'], minutes);
-  const shotP90 = readStatSmart(row, ['Shots', 'Sh'], ['Shots/90', 'Sh/90'], minutes);
-  const tacklesP90 = readStatSmart(row, ['Tackles', 'Tck C', 'Tck'], ['Tackles/90', 'Tck/90'], minutes);
-  const interceptionsP90 = readStatSmart(row, ['Interceptions', 'Itc'], ['Interceptions/90', 'Itc/90'], minutes);
+  const keyPassesP90 = readStatSmart(row, ['Key Passes', 'KP', 'Key', 'CCC'], ['Key Passes/90', 'KP/90', 'OP-KP/90', 'Ch C/90'], minutes);
+  const shotP90 = readStatSmart(row, ['Shots', 'Sh'], ['Shots/90', 'Sh/90', 'Shot/90', 'Shots From Outside The Box Per 90 minutes'], minutes);
+
+  // Defensive (CB / DM / FB filter packs) — also accept Tck R as proxy when Tck/90 missing
+  const tacklesP90 = readStatSmart(row, ['Tackles', 'Tck C', 'Tck'], ['Tackles/90', 'Tck/90', 'K Tck/90'], minutes);
+  const interceptionsP90 = readStatSmart(row, ['Interceptions', 'Itc'], ['Interceptions/90', 'Itc/90', 'Int/90'], minutes);
+  const aerialsP90 = readStatSmart(row, ['Aerials', 'Hdr'], ['Aer A/90', 'Hdr/90'], minutes);
+  const clearancesP90 = readStatSmart(row, ['Clearances', 'Clr'], ['Clr/90'], minutes);
+  const blocksP90 = readStatSmart(row, ['Blocks', 'Blk'], ['Blk/90'], minutes);
+
   const passCompletion = parseNum(row, ['Pas %', 'Pass %'], 80);
-  const savePct = parseNum(row, ['Sv %', 'Save %'], 0);
-  // "Cln/90" is ALREADY per-90 in the export tool — check that alias first
+  const progressivePassesP90 = readStatSmart(row, ['Progressive Passes', 'Pr passes'], ['Pr passes/90'], minutes);
+  const dribblesP90 = readStatSmart(row, ['Dribbles', 'Drb'], ['Drb/90'], minutes);
+  const crossesP90 = readStatSmart(row, ['Crosses', 'Cr C'], ['Cr C/90'], minutes);
+
+  const savePct = parseNum(row, ['Sv %', 'Save %', 'xSv %'], 0);
   const cleanSheetsP90 = readStatSmart(row, ['Clean Sheets', 'CS'], ['Cln/90', 'CS/90', 'Clean Sheets/90'], minutes);
 
   const goalsTotal = parseNum(row, ['Goals', 'Gls'], 0);
@@ -355,25 +396,60 @@ function calculateP90Stats(row: CsvRow, position: PlayerPosition, transferValueM
   const costPerGoal = goalsTotal > 0 ? Math.round((transferValueM * 1000000) / goalsTotal) : 0;
   const costPerAssist = assistsTotal > 0 ? Math.round((transferValueM * 1000000) / assistsTotal) : 0;
 
-  // Moneyball performance is now POSITION-SPECIFIC, not just goals/assists/key passes.
-  // A brilliant cheap centre-back was previously scored ~0 on moneyball just because
-  // he doesn't record assists — this fixes that.
+  // Position-aware Moneyball performance aligned to filter packs
   let performanceSum = 0;
   if (position === 'GK') {
-    performanceSum = (savePct / 100) * 3 + cleanSheetsP90 * 2;
+    performanceSum = (savePct / 100) * 4 + cleanSheetsP90 * 2.5 + (passCompletion / 100) * 0.8;
   } else if (position === 'Central Defender') {
-    performanceSum = (tacklesP90 + interceptionsP90) / 3 + keyPassesP90 * 0.5;
+    const hasDef = (tacklesP90 + interceptionsP90 + aerialsP90 + clearancesP90 + blocksP90) > 0.3;
+    if (hasDef) {
+      performanceSum =
+        (tacklesP90 * 1.4) + (interceptionsP90 * 1.5) + (aerialsP90 * 1.2) +
+        (clearancesP90 * 0.6) + (blocksP90 * 0.7) + (passCompletion / 100) * 1.2 +
+        (progressivePassesP90 * 0.4);
+    } else {
+      // Progressive-only CB export (Pr passes / KP / Pas %)
+      performanceSum =
+        (progressivePassesP90 * 1.2) + (keyPassesP90 * 0.9) + (passCompletion / 100) * 1.4 +
+        (goalsP90 * 0.8) + (assistsP90 * 0.5);
+    }
   } else if (position === 'CDM') {
-    performanceSum = (tacklesP90 + interceptionsP90) / 3 + keyPassesP90 * 0.6 + assistsP90 * 1.0;
+    const hasDef = (tacklesP90 + interceptionsP90) > 0.3;
+    if (hasDef) {
+      performanceSum =
+        (tacklesP90 * 1.5) + (interceptionsP90 * 1.6) + (keyPassesP90 * 0.9) +
+        (assistsP90 * 1.1) + (passCompletion / 100) * 1.3 + (progressivePassesP90 * 0.5);
+    } else {
+      performanceSum =
+        (keyPassesP90 * 1.1) + (assistsP90 * 1.2) + (passCompletion / 100) * 1.4 +
+        (progressivePassesP90 * 0.9) + (goalsP90 * 0.7);
+    }
   } else if (position === 'Wing Back') {
-    performanceSum = ((tacklesP90 + interceptionsP90) / 3) * 0.8 + assistsP90 * 1.5 + keyPassesP90 * 0.5;
+    performanceSum =
+      (tacklesP90 * 1.1) + (interceptionsP90 * 1.0) + (assistsP90 * 1.8) +
+      (keyPassesP90 * 1.0) + (crossesP90 * 0.8) + (dribblesP90 * 0.6) +
+      (passCompletion / 100) * 0.9 + (progressivePassesP90 * 0.5);
+  } else if (position === 'Centre Mid') {
+    performanceSum =
+      (keyPassesP90 * 1.4) + (assistsP90 * 1.6) + (tacklesP90 * 1.0) +
+      (goalsP90 * 1.2) + (passCompletion / 100) * 1.2 + (progressivePassesP90 * 0.6) +
+      (dribblesP90 * 0.4);
+  } else if (position === 'Attacking Mid') {
+    performanceSum =
+      (goalsP90 * 2.2) + (assistsP90 * 2.0) + (keyPassesP90 * 1.6) +
+      (xGP90 * 1.3) + (shotP90 * 0.5) + (dribblesP90 * 0.5);
+  } else if (position === 'Winger') {
+    performanceSum =
+      (goalsP90 * 2.0) + (assistsP90 * 2.2) + (keyPassesP90 * 1.3) +
+      (dribblesP90 * 0.9) + (crossesP90 * 0.7) + (shotP90 * 0.5) + (xGP90 * 0.8);
   } else {
-    // Centre Mid, Attacking Mid, Winger, Striker — attacking/creative output
-    performanceSum = goalsP90 + assistsP90 + keyPassesP90;
+    performanceSum =
+      (goalsP90 * 3.0) + (xGP90 * 1.6) + (shotP90 * 0.7) +
+      (assistsP90 * 1.2) + (keyPassesP90 * 0.5);
   }
-  performanceSum = Math.max(0.01, performanceSum);
+  performanceSum = Math.max(0.05, performanceSum);
 
-  const costSum = Math.max(0.01, transferValueM * 0.5 + wageK * 0.5);
+  const costSum = Math.max(0.4, transferValueM * 0.35 + wageK * 0.45 + 0.8);
   const moneyballIndex = parseFloat((performanceSum / costSum).toFixed(2));
 
   return {
@@ -385,11 +461,19 @@ function calculateP90Stats(row: CsvRow, position: PlayerPosition, transferValueM
     shotP90: parseFloat(shotP90.toFixed(2)),
     tacklesP90: parseFloat(tacklesP90.toFixed(2)),
     interceptionsP90: parseFloat(interceptionsP90.toFixed(2)),
-    passCompletion, savePct,
+    passCompletion,
+    savePct,
     cleanSheetsP90: parseFloat(cleanSheetsP90.toFixed(2)),
+    aerialsP90: parseFloat(aerialsP90.toFixed(2)),
+    clearancesP90: parseFloat(clearancesP90.toFixed(2)),
+    blocksP90: parseFloat(blocksP90.toFixed(2)),
+    progressivePassesP90: parseFloat(progressivePassesP90.toFixed(2)),
+    dribblesP90: parseFloat(dribblesP90.toFixed(2)),
+    crossesP90: parseFloat(crossesP90.toFixed(2)),
     minutesPlayed: minutes,
     appearances: apps,
-    costPerGoal, costPerAssist,
+    costPerGoal,
+    costPerAssist,
     moneyballIndex: Math.min(moneyballIndex, 9.99),
   };
 }
@@ -401,85 +485,173 @@ function calculateValueScore(
   transferValueM: number,
   wageK: number,
   balanced: boolean,
+  minutesColumnPresent = true,
 ): { score: number; perfPercent: number; valuePercent: number; agePercent: number } {
   try {
-    const minutes = Math.max(1, parseNum(row, ['Minutes', 'Mins', 'Min'], 90));
+    const minutesRaw = parseNum(row, ['Minutes', 'Mins', 'Min', 'Mins/'], -1);
+    // If the whole export has no Minutes column, don't crush everyone with the low-sample penalty
+    const minutes = minutesRaw > 0 ? minutesRaw : 90;
+    const applyMinutesPenalty = minutesColumnPresent && minutesRaw > 0;
 
-    const goalsP90 = readStatSmart(row, ['Goals', 'Gls'], ['Goals/90', 'Gls/90'], minutes);
+    const goalsP90 = readStatSmart(row, ['Goals', 'Gls'], ['Goals/90', 'Gls/90', 'Goals per 90 minutes'], minutes);
     const assistsP90 = readStatSmart(row, ['Assists', 'Ast'], ['Assists/90', 'Ast/90'], minutes);
-    const xGP90 = readStatSmart(row, ['xG'], ['xG/90'], minutes);
-    const keyPassesP90 = readStatSmart(row, ['Key Passes', 'KP', 'Key'], ['Key Passes/90', 'KP/90'], minutes);
-    const shotsP90 = readStatSmart(row, ['Shots', 'Sh'], ['Shots/90', 'Sh/90'], minutes);
-    const tacklesP90 = readStatSmart(row, ['Tackles', 'Tck C', 'Tck'], ['Tackles/90', 'Tck/90'], minutes);
-    const interceptionsP90 = readStatSmart(row, ['Interceptions', 'Itc'], ['Interceptions/90', 'Itc/90'], minutes);
+    const xGP90 = readStatSmart(row, ['xG', 'NP-xG'], ['xG/90', 'NP-xG/90'], minutes);
+    const keyPassesP90 = readStatSmart(row, ['Key Passes', 'KP', 'Key', 'CCC'], ['Key Passes/90', 'KP/90', 'OP-KP/90', 'Ch C/90'], minutes);
+    const shotsP90 = readStatSmart(row, ['Shots', 'Sh'], ['Shots/90', 'Sh/90', 'Shot/90', 'Shots From Outside The Box Per 90 minutes'], minutes);
+    const tacklesP90 = readStatSmart(row, ['Tackles', 'Tck C', 'Tck'], ['Tackles/90', 'Tck/90', 'K Tck/90'], minutes);
+    const interceptionsP90 = readStatSmart(row, ['Interceptions', 'Itc'], ['Interceptions/90', 'Itc/90', 'Int/90'], minutes);
+    const aerialsP90 = readStatSmart(row, ['Aerials', 'Hdr'], ['Aer A/90', 'Hdr/90'], minutes);
+    const clearancesP90 = readStatSmart(row, ['Clearances', 'Clr'], ['Clr/90'], minutes);
+    const blocksP90 = readStatSmart(row, ['Blocks', 'Blk'], ['Blk/90'], minutes);
+    const progressivePassesP90 = readStatSmart(row, ['Progressive Passes', 'Pr passes'], ['Pr passes/90'], minutes);
+    const dribblesP90 = readStatSmart(row, ['Dribbles', 'Drb'], ['Drb/90'], minutes);
+    const crossesP90 = readStatSmart(row, ['Crosses', 'Cr C'], ['Cr C/90'], minutes);
     const passCompletion = Math.min(100, Math.max(0, parseNum(row, ['Pas %', 'Pass %'], 80)));
-    const savePct = Math.min(100, Math.max(0, parseNum(row, ['Sv %', 'Save %'], 0)));
+    const savePct = Math.min(100, Math.max(0, parseNum(row, ['Sv %', 'Save %', 'xSv %'], 0)));
     const cleanSheetsP90 = readStatSmart(row, ['Clean Sheets', 'CS'], ['Cln/90', 'CS/90', 'Clean Sheets/90'], minutes);
+    // FM average rating — useful fallback when a filter pack omits defensive columns
+    const fmRating = parseNum(row, ['Rating', 'Av Rat', 'Avg Rating'], 0);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // POSITION PERFORMANCE — calibrated so EVERY position lands in the same band:
+    //   Weak / low sample  → performance 15-30  → score ~40-55
+    //   Solid starter      → performance 42-52  → score ~65-75
+    //   Elite              → performance 65-80  → score ~85-95
+    // Weights differ by position but the OUTPUT scale is shared, so no position
+    // collapses to the floor while another rockets to 99.
+    // ─────────────────────────────────────────────────────────────────────────
+    const ratingBoost = fmRating > 0 ? Math.max(0, fmRating - 6.0) * 6 : 0;
 
     let performance = 0;
     if (position === 'GK') {
-      performance = (savePct * 0.7) + (cleanSheetsP90 * 8) + (passCompletion * 0.15);
+      // Solid: Sv% 75, CS/90 0.4, Pas 65 → ≈ 48
+      performance =
+        (savePct * 0.45) +
+        (cleanSheetsP90 * 22) +
+        (passCompletion * 0.12) +
+        ratingBoost * 0.4;
+
     } else if (position === 'Central Defender') {
-      performance = (tacklesP90 * 2.5) + (interceptionsP90 * 2.8) + (passCompletion * 0.3) + (keyPassesP90 * 0.8);
+      const defPart =
+        (tacklesP90 * 4) + (interceptionsP90 * 4.5) + (aerialsP90 * 3) +
+        (clearancesP90 * 1.8) + (blocksP90 * 2);
+      const progPart =
+        (progressivePassesP90 * 5.5) + (keyPassesP90 * 7) + (passCompletion * 0.25) +
+        (goalsP90 * 8) + (assistsP90 * 6);
+      const hasDefStats = (tacklesP90 + interceptionsP90 + aerialsP90 + clearancesP90 + blocksP90) > 0.3;
+      // Solid def: tck 2.2, int 2, aer 4, clr 2, blk 0.8 → ≈ 48
+      // Solid prog: pr 3, kp 0.4, pas 88 → ≈ 48
+      if (hasDefStats) {
+        performance = defPart + (progressivePassesP90 * 1.5) + (keyPassesP90 * 1.5) + (passCompletion * 0.15);
+      } else {
+        performance = progPart + ratingBoost;
+      }
+
     } else if (position === 'CDM') {
-      performance = (tacklesP90 * 2.2) + (interceptionsP90 * 2.5) + (keyPassesP90 * 1.3) + (passCompletion * 0.4);
+      const defPart = (tacklesP90 * 4.5) + (interceptionsP90 * 4.5);
+      const progPart =
+        (keyPassesP90 * 6) + (assistsP90 * 12) + (passCompletion * 0.2) +
+        (progressivePassesP90 * 3) + (goalsP90 * 8);
+      const hasDefStats = (tacklesP90 + interceptionsP90) > 0.3;
+      // Solid: tck 2.5, int 2.2, kp 1.2, pas 86, pr 2.5 → ≈ 48
+      if (hasDefStats) {
+        performance = defPart + (keyPassesP90 * 5) + (assistsP90 * 10) +
+          (passCompletion * 0.15) + (progressivePassesP90 * 2.5) + (goalsP90 * 6);
+      } else {
+        performance = progPart + ratingBoost;
+      }
+
     } else if (position === 'Wing Back') {
-      performance = (tacklesP90 * 2.0) + (interceptionsP90 * 1.8) + (assistsP90 * 2.5) + (keyPassesP90 * 1.2) + (passCompletion * 0.3);
+      // Solid: tck 2, int 1.5, A 0.2, KP 1.2, Cr 2, Drb 1.5 → ≈ 48
+      performance =
+        (tacklesP90 * 3.5) + (interceptionsP90 * 3.5) +
+        (assistsP90 * 22) + (keyPassesP90 * 6) +
+        (crossesP90 * 4.5) + (dribblesP90 * 4.5) +
+        (passCompletion * 0.12) + (goalsP90 * 10) +
+        (progressivePassesP90 * 2.5) + ratingBoost * 0.3;
+
     } else if (position === 'Centre Mid') {
-      performance = (keyPassesP90 * 1.8) + (assistsP90 * 2.2) + (tacklesP90 * 1.5) + (passCompletion * 0.4);
+      // Solid: KP 1.8, A 0.2, tck 1.8, G 0.15, pas 87, pr 3 → ≈ 48
+      performance =
+        (keyPassesP90 * 7) + (assistsP90 * 20) + (tacklesP90 * 4) +
+        (goalsP90 * 14) + (passCompletion * 0.15) + (progressivePassesP90 * 3.5) +
+        (dribblesP90 * 3) + (interceptionsP90 * 3.5) + ratingBoost * 0.25;
+
     } else if (position === 'Attacking Mid') {
-      performance = (goalsP90 * 3.5) + (assistsP90 * 2.8) + (keyPassesP90 * 2.0) + (shotsP90 * 1.2) + (xGP90 * 1.5);
+      // Solid: G 0.3, A 0.25, KP 2.0, xG 0.3, Sh 2.5 → ≈ 48
+      performance =
+        (goalsP90 * 24) + (assistsP90 * 22) + (keyPassesP90 * 7) +
+        (xGP90 * 12) + (shotsP90 * 4) + (dribblesP90 * 3.5) +
+        (passCompletion * 0.12) + ratingBoost * 0.25;
+
     } else if (position === 'Winger') {
-      performance = (goalsP90 * 3.2) + (assistsP90 * 3.0) + (keyPassesP90 * 1.8) + (shotsP90 * 1.3) + (xGP90 * 1.2);
-    } else if (position === 'Striker') {
-      performance = (goalsP90 * 4.0) + (xGP90 * 1.8) + (shotsP90 * 1.4) + (assistsP90 * 1.5) + (keyPassesP90 * 0.8);
+      // Solid: G 0.3, A 0.25, KP 1.5, Drb 2.5, Cr 1.5, Sh 2.5 → ≈ 48
+      performance =
+        (goalsP90 * 22) + (assistsP90 * 22) + (keyPassesP90 * 6) +
+        (dribblesP90 * 5) + (crossesP90 * 4) + (shotsP90 * 4) +
+        (xGP90 * 10) + ratingBoost * 0.25;
+
+    } else {
+      // Striker — Solid: G 0.4, xG 0.35, Sh 2.8 → ≈ 48
+      // Elite: G 0.7, xG 0.5, Sh 4 → ≈ 75
+      performance =
+        (goalsP90 * 42) + (xGP90 * 18) + (shotsP90 * 7) +
+        (assistsP90 * 14) + (keyPassesP90 * 5) + ratingBoost * 0.25;
     }
     performance = Math.max(0, performance);
 
-    const leagueMultiplier = getLeagueMultiplier(league);
-    const valueM = Math.max(0.1, transferValueM);
-    const wK = Math.max(0.1, wageK);
-    const efficiency = Math.min(45, Math.max(20, 88 / (valueM * 0.45 + wK * 0.55)));
+    const valueM = Math.max(0.15, transferValueM);
+    const wK = Math.max(0.15, wageK);
+    const costProxy = valueM * 0.4 + wK * 0.5;
+    const efficiency = Math.min(48, Math.max(12, 55 / Math.sqrt(costProxy + 0.6)));
 
-    const age = Math.max(16, Math.min(40, parseInt(String(row.Age ?? 25)) || 25));
+    const age = Math.max(16, Math.min(42, parseInt(String(pickFirstRaw(row, ['Age']) ?? 25)) || 25));
     let ageBonus = 0;
-    if (age <= 20) ageBonus = 18;
-    else if (age <= 22) ageBonus = 14;
-    else if (age <= 24) ageBonus = 10;
-    else if (age <= 26) ageBonus = 6;
-    else if (age <= 28) ageBonus = 2;
-    else if (age >= 33) ageBonus = -15;
-    else if (age >= 31) ageBonus = -8;
+    if (age <= 19) ageBonus = 14;
+    else if (age <= 21) ageBonus = 11;
+    else if (age <= 23) ageBonus = 8;
+    else if (age <= 25) ageBonus = 5;
+    else if (age <= 27) ageBonus = 2;
+    else if (age <= 29) ageBonus = 0;
+    else if (age <= 31) ageBonus = -4;
+    else if (age <= 33) ageBonus = -8;
+    else ageBonus = -12;
 
     let minutesFactor = 1.0;
-    if (minutes < 500) minutesFactor = 0.55;
-    else if (minutes < 900) minutesFactor = 0.75;
-    else if (minutes < 1400) minutesFactor = 0.92;
+    if (applyMinutesPenalty) {
+      if (minutes < 300) minutesFactor = 0.72;
+      else if (minutes < 600) minutesFactor = 0.82;
+      else if (minutes < 1000) minutesFactor = 0.90;
+      else if (minutes < 1500) minutesFactor = 0.96;
+    }
 
-    const baseScore = performance * 2.2;
-    let final = ((baseScore * 0.58) + (efficiency * 0.32) + (ageBonus * 0.1)) * minutesFactor * leagueMultiplier;
-    if (balanced) final *= 0.92;
+    const leagueMultiplier = getLeagueMultiplier(league);
+    const perfComponent = performance * 1.85;
+    const rawScore = (perfComponent * 0.62) + (efficiency * 0.28) + (ageBonus * 0.10);
+    let final = rawScore * minutesFactor * leagueMultiplier;
+    if (balanced) final *= 0.94;
 
-    const score = Math.max(46, Math.min(100, Math.round(final)));
-    const denom = Math.max(1, final);
+    // Soft floor 35 — no artificial 46 cluster
+    const score = Math.max(35, Math.min(99, Math.round(final)));
 
+    const totalPositive = Math.max(1, (perfComponent * 0.62) + (efficiency * 0.28) + Math.max(0, ageBonus * 0.10));
     return {
       score,
-      perfPercent: Math.min(100, Math.max(0, Math.round((baseScore * 0.58 / denom) * 100))) || 65,
-      valuePercent: Math.min(100, Math.max(0, Math.round((efficiency * 0.32 / denom) * 100))) || 60,
-      agePercent: Math.min(100, Math.max(0, Math.round((Math.abs(ageBonus * 0.1) / denom) * 100))) || 45,
+      perfPercent: Math.min(100, Math.max(0, Math.round(((perfComponent * 0.62) / totalPositive) * 100))) || 60,
+      valuePercent: Math.min(100, Math.max(0, Math.round(((efficiency * 0.28) / totalPositive) * 100))) || 30,
+      agePercent: Math.min(100, Math.max(0, Math.round((Math.abs(ageBonus * 0.10) / totalPositive) * 100))) || 10,
     };
   } catch {
-    return { score: 50, perfPercent: 50, valuePercent: 50, agePercent: 50 };
+    return { score: 55, perfPercent: 50, valuePercent: 30, agePercent: 20 };
   }
 }
 
 function calculateBadge(score: number, valueM: number, age: number, minutes: number, moneyballIndex: number): Player['badge'] {
-  if (score >= 88 && age <= 23 && minutes > 900) return { type: 'gem', label: 'Hidden Gem', icon: '💎' };
-  if (score >= 82 && valueM <= 8 && minutes > 500) return { type: 'bargain', label: 'Bargain', icon: '🤑' };
-  if (moneyballIndex > 0.8 && score >= 75 && minutes > 600) return { type: 'gem', label: 'Moneyball Star', icon: '⭐' };
-  if (score < 55 && valueM > 30) return { type: 'avoid', label: 'Avoid', icon: '🚫' };
-  if (score >= 80 && valueM > 50) return { type: 'overpriced', label: 'Overpriced', icon: '⚠️' };
+  if (score >= 86 && age <= 23 && minutes > 800) return { type: 'gem', label: 'Hidden Gem', icon: '💎' };
+  if (score >= 78 && valueM <= 10 && minutes > 450) return { type: 'bargain', label: 'Bargain', icon: '🤑' };
+  if (moneyballIndex > 0.75 && score >= 72 && minutes > 500) return { type: 'gem', label: 'Moneyball Star', icon: '⭐' };
+  if (score < 50 && valueM > 25) return { type: 'avoid', label: 'Avoid', icon: '🚫' };
+  if (score >= 78 && valueM > 45) return { type: 'overpriced', label: 'Overpriced', icon: '⚠️' };
   return { type: 'none', label: '', icon: '' };
 }
 
@@ -558,30 +730,73 @@ function getStatsForPosition(position: PlayerPosition, stats: P90StatsType): Sta
   if (position === 'GK') {
     return [
       { key: 'savePct', label: 'Save %', value: stats.savePct, suffix: '%', benchmark: 75 },
-      { key: 'cleanSheetsP90', label: 'Clean Sheets/90', value: stats.cleanSheetsP90, suffix: '', benchmark: 0.5 },
+      { key: 'cleanSheetsP90', label: 'Clean Sheets/90', value: stats.cleanSheetsP90, suffix: '', benchmark: 0.45 },
+      { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 70 },
     ];
   }
-  if (['Central Defender', 'CDM', 'Wing Back'].includes(position)) {
+  if (position === 'Central Defender') {
+    // Prefer defensive metrics when present; fall back to progressive pack
+    const hasDef = (stats.tacklesP90 + stats.interceptionsP90 + stats.aerialsP90) > 0.3;
+    if (hasDef) {
+      return [
+        { key: 'tacklesP90', label: 'Tackles/90', value: stats.tacklesP90, suffix: '', benchmark: 2.2 },
+        { key: 'interceptionsP90', label: 'Interceptions/90', value: stats.interceptionsP90, suffix: '', benchmark: 2.0 },
+        { key: 'aerialsP90', label: 'Aerials/90', value: stats.aerialsP90, suffix: '', benchmark: 3.5 },
+        { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 85 },
+      ];
+    }
+    return [
+      { key: 'progressivePassesP90', label: 'Prog. Passes/90', value: stats.progressivePassesP90, suffix: '', benchmark: 3.0 },
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 0.5 },
+      { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 88 },
+      { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: 0.08 },
+    ];
+  }
+  if (position === 'CDM') {
     return [
       { key: 'tacklesP90', label: 'Tackles/90', value: stats.tacklesP90, suffix: '', benchmark: 2.5 },
-      { key: 'interceptionsP90', label: 'Interceptions/90', value: stats.interceptionsP90, suffix: '', benchmark: 2.0 },
-      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 1.5 },
-      { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 85 },
+      { key: 'interceptionsP90', label: 'Interceptions/90', value: stats.interceptionsP90, suffix: '', benchmark: 2.2 },
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 1.4 },
+      { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 86 },
+    ];
+  }
+  if (position === 'Wing Back') {
+    return [
+      { key: 'tacklesP90', label: 'Tackles/90', value: stats.tacklesP90, suffix: '', benchmark: 2.0 },
+      { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.18 },
+      { key: 'crossesP90', label: 'Crosses/90', value: stats.crossesP90, suffix: '', benchmark: 1.8 },
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 1.3 },
+    ];
+  }
+  if (position === 'Centre Mid') {
+    return [
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 1.8 },
+      { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.2 },
+      { key: 'tacklesP90', label: 'Tackles/90', value: stats.tacklesP90, suffix: '', benchmark: 1.8 },
+      { key: 'passCompletion', label: 'Pass %', value: stats.passCompletion, suffix: '%', benchmark: 87 },
     ];
   }
   if (position === 'Attacking Mid') {
     return [
-      { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: 0.35 },
+      { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: 0.3 },
       { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.25 },
-      { key: 'xGP90', label: 'xG/90', value: stats.xGP90, suffix: '', benchmark: 0.4 },
-      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 2.5 },
+      { key: 'xGP90', label: 'xG/90', value: stats.xGP90, suffix: '', benchmark: 0.35 },
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 2.2 },
+    ];
+  }
+  if (position === 'Winger') {
+    return [
+      { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: 0.3 },
+      { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.22 },
+      { key: 'dribblesP90', label: 'Dribbles/90', value: stats.dribblesP90, suffix: '', benchmark: 2.5 },
+      { key: 'keyPassesP90', label: 'Key Passes/90', value: stats.keyPassesP90, suffix: '', benchmark: 1.8 },
     ];
   }
   return [
-    { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: position === 'Striker' ? 0.4 : 0.35 },
-    { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.2 },
-    { key: 'xGP90', label: 'xG/90', value: stats.xGP90, suffix: '', benchmark: position === 'Striker' ? 0.45 : 0.4 },
-    { key: 'shotP90', label: 'Shots/90', value: stats.shotP90, suffix: '', benchmark: 2.5 },
+    { key: 'goalsP90', label: 'Goals/90', value: stats.goalsP90, suffix: '', benchmark: 0.4 },
+    { key: 'xGP90', label: 'xG/90', value: stats.xGP90, suffix: '', benchmark: 0.4 },
+    { key: 'shotP90', label: 'Shots/90', value: stats.shotP90, suffix: '', benchmark: 2.8 },
+    { key: 'assistsP90', label: 'Assists/90', value: stats.assistsP90, suffix: '', benchmark: 0.15 },
   ];
 }
 
@@ -850,7 +1065,7 @@ export default function FMValueScoutV7() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const buildPlayer = useCallback((row: CsvRow, index: number, idBase: number): Player => {
+  const buildPlayer = useCallback((row: CsvRow, index: number, idBase: number, minutesColumnPresent: boolean): Player => {
     const rawPos = String(pickFirstRaw(row, ['Position', 'Pos']) ?? '');
     const group = getPositionGroup(rawPos);
     const league = String(pickFirstRaw(row, ['League', 'Division']) ?? '');
@@ -866,9 +1081,11 @@ export default function FMValueScoutV7() {
     if (wageEurosWeekly !== null && wageParsed.monthly) wageEurosWeekly = wageEurosWeekly / 4.345;
     const wageK = wageEurosWeekly !== null ? Math.max(0.1, wageEurosWeekly / 1000) : 1;
 
-    const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(row, group, league, transferValueM, wageK, balanced);
+    const { score, perfPercent, valuePercent, agePercent } = calculateValueScore(
+      row, group, league, transferValueM, wageK, balanced, minutesColumnPresent,
+    );
     const age = Math.max(16, Math.min(40, parseInt(String(pickFirstRaw(row, ['Age']) ?? 25)) || 25));
-    const minutes = Math.max(1, parseNum(row, ['Minutes', 'Mins', 'Min'], 90));
+    const minutes = Math.max(1, parseNum(row, ['Minutes', 'Mins', 'Min', 'Mins/'], 90));
     const p90Stats = calculateP90Stats(row, group, transferValueM, wageK);
 
     return {
@@ -902,6 +1119,10 @@ export default function FMValueScoutV7() {
         try {
           const base = Date.now();
           const rows = results.data;
+          const fields = (results.meta.fields || []).map(f => f.toLowerCase());
+          const minutesColumnPresent = fields.some(f =>
+            f === 'minutes' || f === 'mins' || f === 'min' || f === 'mins/' || f.includes('minute')
+          );
           const validRows = rows.filter(row => row && Object.keys(row).length > 0 && pickFirstRaw(row, ['Name', 'Player']));
 
           if (validRows.length === 0) {
@@ -911,14 +1132,17 @@ export default function FMValueScoutV7() {
           }
 
           const parsed = validRows
-            .map((row, i) => buildPlayer(row, i, base))
+            .map((row, i) => buildPlayer(row, i, base, minutesColumnPresent))
             .sort((a, b) => b.valueScore - a.valueScore)
             .map((p, i) => ({ ...p, rank: i + 1 }));
 
           const estimatedCount = parsed.filter(p => p.valueEstimated).length;
-          const suffix = estimatedCount > 0 ? ` | ⚠️ ${estimatedCount} had unreadable Transfer Value (using estimate)` : '';
+          const warnings: string[] = [];
+          if (estimatedCount > 0) warnings.push(`${estimatedCount} had unreadable Transfer Value (using estimate)`);
+          if (!minutesColumnPresent) warnings.push('No Minutes column — scores not reliability-penalised');
+          const suffix = warnings.length ? ` | ⚠️ ${warnings.join(' · ')}` : '';
           setPlayers(parsed);
-          setUploadMsg({ type: estimatedCount > 0 ? 'warning' : 'success', text: `✓ Loaded ${parsed.length} players${suffix}` });
+          setUploadMsg({ type: warnings.length ? 'warning' : 'success', text: `✓ Loaded ${parsed.length} players${suffix}` });
           setActiveTab('upload');
         } catch (e) {
           setUploadMsg({ type: 'error', text: `Parse error: ${e instanceof Error ? e.message : 'Unknown error'}` });
@@ -1087,7 +1311,7 @@ export default function FMValueScoutV7() {
             <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16, letterSpacing: '-1px' }}>VS</div>
             <div>
               <div style={{ fontWeight: 600, fontSize: 16 }}>FM Value Scout</div>
-              <div style={{ fontSize: 11, color: '#a78bfa', marginTop: -2 }}>V7 · P/90 Moneyball</div>
+              <div style={{ fontSize: 11, color: '#a78bfa', marginTop: -2 }}>V7.1 · Improved Scoring</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1763,7 +1987,7 @@ export default function FMValueScoutV7() {
       </div>
 
       <footer style={{ borderTop: '0.5px solid rgba(139,92,246,0.2)', padding: '20px 24px', textAlign: 'center', fontSize: 12, color: '#52525b', marginTop: 40 }}>
-        FM Value Scout Final version· Made for FM26
+        FM Value Scout V7.1 · Improved Scoring · Made for FM26
       </footer>
     </div>
   );
